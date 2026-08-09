@@ -67,14 +67,14 @@
 - [x] Review the exact diff and record the branch/base/patch hashes.
 - [x] Confirm every inexpensive gate is green.
 - [x] Trigger each reviewed `build-wasm.yml` attempt only after inexpensive gates are green.
-- [ ] Download the artifact to a dedicated `D:/tmp` directory and record its
+- [x] Download the artifact to a dedicated `D:/tmp` directory and record its
       SHA-256 hashes.
-- [ ] Verify `_lok_convertDocument` and `_lok_convertFree` exports.
-- [ ] Run `test.docx` -> PDF and assert `%PDF-`, non-empty output,
+- [x] Verify `_lok_convertDocument` and `_lok_convertFree` exports.
+- [x] Run `test.docx` -> PDF and assert `%PDF-`, non-empty output,
       `ok=true`, `stage=complete`, `cleanup=clean`, and hidden-path evidence.
-- [ ] Run a second conversion in the same Worker/process.
-- [ ] Run malformed-request and load/password-failure negative gates.
-- [ ] Store fresh-artifact gate scripts and machine-readable results beside the
+- [x] Run a second conversion in the same Worker/process.
+- [x] Run malformed-request and load/password-failure negative gates.
+- [x] Store fresh-artifact gate scripts and machine-readable results beside the
       artifact.
 
 ## Validation commands
@@ -175,7 +175,96 @@ Patch verification will use `git apply --check` and
 - The complete four-patch apply/reset/strict-replay gate passed again against
   pinned LibreOffice `d1c9e0e4e1ddeb24fe8f93e56860b3765043f8b1`, preserving
   ignored `workdir/` outputs.
-- A fresh expensive build remains required for artifact-level acceptance.
+- At that point, a fresh expensive build remained required for artifact-level
+  acceptance.
+
+## Successful fresh-artifact gate record (2026-08-09)
+
+- The repaired bridge compiled successfully in
+  [GHA 31211473147](https://github.com/killbus/libreoffice-wasm-conversion-runtime/actions/runs/31211473147)
+  at exact runtime HEAD
+  `71d33678ed74872ebbb1bc37f5778143f8f5e401`.
+- The bridge patch SHA-256 in that build was
+  `F4884155F7CE2242FFC3E56E19237DEEB8308A2BF0E60061E49C110536FB4F9F`.
+- The downloaded and extracted artifact is stored at
+  `D:/tmp/lo-artifacts-08-08-31211473147`. The original workflow artifact
+  inventory is:
+  - `soffice-wasm-conversion-only-31211473147.zip`: 78,834,433 bytes,
+    SHA-256
+    `ff378040a97d5e8df32c0e221add55200bbaa33015213fa2225849822d558e3e`;
+  - `soffice.wasm`: 148,022,311 bytes, SHA-256
+    `b24a888550d27d2942ff9c8c9a84e20cd0c852db154e8558647cb9c5294ff291`;
+  - `soffice.data`: 99,735,790 bytes, SHA-256
+    `c4b8a92b566d4e0d4723d321ef926e1b9fbeb575d28cdd6466d27fd2c17c5514`;
+  - `soffice.cjs`: 439,517 bytes, SHA-256
+    `0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5`;
+  - `soffice.js`: 439,517 bytes, SHA-256
+    `0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5`.
+- `loader.cjs` was copied beside the extracted files only so the Node probe
+  resolves the artifact from its own directory. It is not an original workflow
+  artifact; its SHA-256 is
+  `7cebd863dcd071a5eb02bc26fa7701e7dc5c865d1e130e5595672e56a34934cf`.
+- The raw WebAssembly export table exposes `lok_convertDocument` and
+  `lok_convertFree`, while the Emscripten module exposes and successfully calls
+  `_lok_convertDocument` and `_lok_convertFree`. The missing underscore in the
+  raw table is Emscripten naming behavior, not a missing export.
+
+### Positive gate
+
+- Input `test.docx`: 6,693,403 bytes, SHA-256
+  `a78495545ae41486aa61c9a0e8c4c78f6491a8e7b3cfacbd4185ed0f124f59df`.
+- `gate/success.json`: 1,702 bytes, SHA-256
+  `37132a98adddbd7fd2b19000d95b1112d38b4d005346a5f6b74a68202cfb1a28`.
+- One initialized runtime, process PID `1580`, completed two consecutive
+  DOCX-to-PDF conversions. Both outputs were 651,789 bytes and began with
+  `%PDF-`:
+  - `gate/test-first.pdf`: SHA-256
+    `f1e549d62dcb2c964881832c453f40335e231d3d4eae07f4b5f247fe88345985`;
+  - `gate/test-second.pdf`: SHA-256
+    `67214893422978428602f7097ae57f564d843e00dca01df496b1432e71ba3e36`.
+- Both native calls returned `ok=true`, `stage=complete`, `cleanup=clean`,
+  `hiddenLoad=true`, and `visibleFrameSetupEntered=false`. This is native
+  control-flow evidence that the official hidden path ran without entering
+  visible-frame setup.
+
+### Negative and recovery gate
+
+- Reproducible runner `gate/run-negative-gate.cjs`: 17,724 bytes, SHA-256
+  `cf04e26d8ff9048a8d6f698c27d8693f049c3575d73998cd0e70a37976280669`.
+- Machine-readable result `gate/negative.json`: 11,424 bytes, SHA-256
+  `1b4dbadd1db9289580057ea4cddb17edc600589aaf3f47b92b308ce07ad99442`.
+  The final run used PID `10176`, reported `status=passed`, and exited `0`.
+- Malformed JSON, unsupported `schemaVersion: 2`, and a missing `inputUrl`
+  each returned a structured `validate/not-needed` failure. A missing input
+  file returned a structured `load/not-needed` failure.
+- The real encrypted fixture
+  `gate/fixtures/Encrypted_MSO2007_abc.docx` is 18,432 bytes with SHA-256
+  `ea105a1eb01653c904320ef9ab426686cc468b09503f617725c41cee2f6f549f`.
+  Password `abc` completed through the hidden path and produced
+  `gate/encrypted-correct.pdf` (6,385 bytes, `%PDF-`, SHA-256
+  `ce9b29a160a9509e8f342fd847570c773d9ea2df3d7b45bc6b150534fd4eb1a0`);
+  password `not-abc` returned a structured `load/not-needed` failure.
+- After all safe failures, that same runtime successfully converted the valid
+  DOCX again with `cleanup=clean`, `hiddenLoad=true`, and
+  `visibleFrameSetupEntered=false`. `gate/valid-after-failures.pdf` is 651,789
+  bytes with SHA-256
+  `01a117aa9250421e5dffb28497bf93b1009a432c15ea1ad5347558e79468dc10`.
+- Every bridge call returned ABI code `0`; no C++/WASM exception escaped.
+  Native result allocations were released with `_lok_convertFree`, and request
+  plus result-slot allocations were released with Emscripten `_free`. No
+  `cleanup=uncertain` result was observed, and the runner rejects reuse if one
+  is ever observed.
+- The final non-WASM full-scope check passed again: 16 Vitest files with 144
+  tests passed and 1 skipped; type-check passed; lint reported 0 errors and the
+  same 22 existing warnings; package build, `git diff --check`, and Trellis task
+  validation passed.
+- Phase 3.3 found no additional spec change for artifact acceptance: the
+  reusable cached-source replay rules already live in
+  `.trellis/spec/backend/wasm-patch-stack.md`, while artifact hashes, process
+  IDs, and gate outcomes are run-specific evidence retained in this task.
+- No additional expensive WASM build was triggered after GHA `31211473147`;
+  all positive, negative, password, ownership, and recovery checks reused this
+  one successful artifact.
 
 ## Risk and rollback points
 
