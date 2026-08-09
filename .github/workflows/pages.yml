@@ -29,6 +29,14 @@ concurrency:
 
 jobs:
   build:
+    # Semantic release-trigger isolation (see .trellis/tasks/08-10-.../design.md §6):
+    #   - keep deliberate manual dispatch working;
+    #   - for release.published, deploy Pages only for semantic-package tags
+    #     (v<semver>: starts with "v", contains a ".", does not contain the
+    #     runtime namespace); deny runtime-artifact-*, empty/malformed tags;
+    #   - decision mirror in scripts/release-runtime/lib/workflow-decision.mjs
+    #     is covered by tests/release-runtime/workflow-guard.test.ts.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') && contains(github.event.release.tag_name, '.') && !contains(github.event.release.tag_name, 'runtime')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (with LFS binaries)
