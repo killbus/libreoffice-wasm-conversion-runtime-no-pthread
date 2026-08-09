@@ -6,8 +6,8 @@ import {
   decodeNativeConversionResult,
   encodeNativeConversionRequest,
   isNativeConversionRuntimeReusable,
-  resolveNativeOutputFilter,
-  toNativeConversionUrl,
+  normalizeLibreOfficeUrl,
+  resolveLibreOfficeExportFilter,
 } from '../src/native-conversion-bridge.js';
 
 describe('native conversion bridge contract', () => {
@@ -17,7 +17,7 @@ describe('native conversion bridge contract', () => {
     ['pptx', 'impress_pdf_Export'],
     ['odg', 'draw_pdf_Export'],
   ])('resolves %s -> PDF to an explicit document-family filter', (input, expected) => {
-    expect(resolveNativeOutputFilter(input, 'PDF')).toBe(expected);
+    expect(resolveLibreOfficeExportFilter(input, 'PDF')).toBe(expected);
   });
 
   it('builds the normalized DOCX -> PDF schema-v1 request', () => {
@@ -88,7 +88,7 @@ describe('native conversion bridge contract', () => {
   });
 
   it('rejects unsupported pairs and malformed FilterData before native invocation', () => {
-    expect(() => resolveNativeOutputFilter('docx', 'xlsx')).toThrowError(
+    expect(() => resolveLibreOfficeExportFilter('docx', 'xlsx')).toThrowError(
       /Unsupported conversion: docx -> xlsx/
     );
 
@@ -115,7 +115,7 @@ describe('native conversion bridge contract', () => {
       outputFormat: 'pdf',
     });
 
-    expect(toNativeConversionUrl('file:///already/absolute.docx')).toBe(
+    expect(normalizeLibreOfficeUrl('file:///already/absolute.docx')).toBe(
       'file:///already/absolute.docx'
     );
     expect(() => encodeNativeConversionRequest({

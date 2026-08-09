@@ -162,10 +162,10 @@ function validateFilterData(value: unknown): asserts value is NativeFilterData {
   }
 }
 
-/** Convert an Emscripten VFS path to the absolute URL expected by LibreOffice. */
-export function toNativeConversionUrl(pathOrUrl: string): string {
+/** Normalize an Emscripten VFS path or absolute URL for LibreOffice. */
+export function normalizeLibreOfficeUrl(pathOrUrl: string): string {
   if (typeof pathOrUrl !== 'string' || pathOrUrl.length === 0) {
-    return contractFailure('Native conversion path must be a non-empty string');
+    return contractFailure('LibreOffice conversion path must be a non-empty string');
   }
   if (ABSOLUTE_URL_PATTERN.test(pathOrUrl)) {
     return pathOrUrl;
@@ -176,7 +176,7 @@ export function toNativeConversionUrl(pathOrUrl: string): string {
 }
 
 /** Resolve a public input/output pair to an explicit LibreOffice export filter. */
-export function resolveNativeOutputFilter(
+export function resolveLibreOfficeExportFilter(
   inputFormat: InputFormat | string,
   outputFormat: OutputFormat | string
 ): string {
@@ -208,7 +208,7 @@ export function resolveNativeOutputFilter(
   const documentType = CATEGORY_DOCUMENT_TYPES[category];
   const filter = DOC_TYPE_FILTERS[documentType][typedOutput] ?? FORMAT_FILTERS[typedOutput];
   if (!filter) {
-    return contractFailure(`No native output filter for ${typedInput} -> ${typedOutput}`);
+    return contractFailure(`No LibreOffice export filter for ${typedInput} -> ${typedOutput}`);
   }
   return filter;
 }
@@ -282,7 +282,7 @@ export function createNativeConversionRequest(
 
   const normalizedInput = parameters.inputFormat.toLowerCase();
   const normalizedOutput = parameters.outputFormat.toLowerCase();
-  const outputFilter = resolveNativeOutputFilter(normalizedInput, normalizedOutput);
+  const outputFilter = resolveLibreOfficeExportFilter(normalizedInput, normalizedOutput);
   const typedOutput = normalizedOutput as OutputFormat;
   const inputOptions = normalizedInput === 'csv'
     ? resolveCsvInputOptions()
@@ -295,8 +295,8 @@ export function createNativeConversionRequest(
 
   return {
     schemaVersion: NATIVE_CONVERSION_SCHEMA_VERSION,
-    inputUrl: toNativeConversionUrl(parameters.inputPath),
-    outputUrl: toNativeConversionUrl(parameters.outputPath),
+    inputUrl: normalizeLibreOfficeUrl(parameters.inputPath),
+    outputUrl: normalizeLibreOfficeUrl(parameters.outputPath),
     ...inputOptions,
     password: parameters.password && parameters.password.length > 0
       ? parameters.password
