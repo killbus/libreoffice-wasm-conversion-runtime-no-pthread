@@ -306,19 +306,41 @@ export interface FontData {
 }
 
 /**
- * Explicit paths to WASM files (Browser)
- * All paths are required when specified explicitly
+ * How Emscripten starts pthread Workers in the browser runtime artifact.
+ *
+ * - `external`: the glue requests a separate `soffice.worker.js` asset.
+ * - `main-script`: the glue uses `soffice.js` through `mainScriptUrlOrBlob`.
  */
-export interface BrowserWasmPaths {
+export type PthreadWorkerMode = 'external' | 'main-script';
+
+/** Required browser runtime files shared by both pthread modes. */
+export interface BrowserWasmCorePaths {
   /** URL to soffice.js - the main Emscripten loader script */
   sofficeJs: string;
   /** URL to soffice.wasm - the WebAssembly binary (~112MB) */
   sofficeWasm: string;
   /** URL to soffice.data - the virtual filesystem image (~80MB) */
   sofficeData: string;
-  /** URL to soffice.worker.js - the Emscripten pthread worker */
-  sofficeWorkerJs: string;
 }
+
+/**
+ * Explicit paths to WASM files (Browser).
+ *
+ * Omitting `pthreadWorkerMode` preserves the legacy external-worker contract.
+ * A main-script artifact must not provide `sofficeWorkerJs`.
+ */
+export type BrowserWasmPaths = BrowserWasmCorePaths & (
+  | {
+    pthreadWorkerMode?: 'external';
+    /** URL to soffice.worker.js - required by external-worker glue */
+    sofficeWorkerJs: string;
+  }
+  | {
+    pthreadWorkerMode: 'main-script';
+    /** Main-script glue has no standalone pthread worker asset. */
+    sofficeWorkerJs?: never;
+  }
+);
 
 /**
  * Browser converter initialization options
@@ -331,7 +353,18 @@ export interface BrowserConverterOptions {
   sofficeWasm?: string;
   /** URL to soffice.data - defaults to /wasm/soffice.data */
   sofficeData?: string;
-  /** URL to soffice.worker.js - defaults to /wasm/soffice.worker.js */
+  /**
+   * Pthread Worker bootstrap mode.
+   * Omitted values retain the legacy external-worker default.
+   *
+   * @default 'external'
+   */
+  pthreadWorkerMode?: PthreadWorkerMode;
+  /**
+   * URL to soffice.worker.js.
+   * Defaults to /wasm/soffice.worker.js in external mode and must be omitted
+   * in main-script mode.
+   */
   sofficeWorkerJs?: string;
 
   /**
@@ -382,17 +415,35 @@ export interface WorkerBrowserConverterOptions extends BrowserConverterOptions {
   enableProgressTracking?: boolean;
 }
 
+/** Internal browser runtime paths after defaults and contract validation. */
+export type ResolvedBrowserWasmPaths = BrowserWasmCorePaths & (
+  | {
+    pthreadWorkerMode: 'external';
+    sofficeWorkerJs: string;
+  }
+  | {
+    pthreadWorkerMode: 'main-script';
+    sofficeWorkerJs?: never;
+  }
+);
+
 /**
- * Internal type for BrowserConverterOptions after defaults are applied
- * All WASM paths are guaranteed to be defined
+ * Internal type for BrowserConverterOptions after defaults are applied.
+ * Core paths and the selected pthread contract are guaranteed to be defined.
  */
-export type ResolvedBrowserConverterOptions = BrowserConverterOptions & BrowserWasmPaths;
+export type ResolvedBrowserConverterOptions = Omit<
+  BrowserConverterOptions,
+  keyof BrowserWasmCorePaths | 'pthreadWorkerMode' | 'sofficeWorkerJs'
+> & ResolvedBrowserWasmPaths;
 
 /**
  * Internal type for WorkerBrowserConverterOptions after defaults are applied
  * All WASM paths and browserWorkerJs are guaranteed to be defined
  */
-export type ResolvedWorkerBrowserConverterOptions = WorkerBrowserConverterOptions & BrowserWasmPaths & {
+export type ResolvedWorkerBrowserConverterOptions = Omit<
+  WorkerBrowserConverterOptions,
+  keyof BrowserWasmCorePaths | 'pthreadWorkerMode' | 'sofficeWorkerJs' | 'browserWorkerJs'
+> & ResolvedBrowserWasmPaths & {
   browserWorkerJs: string;
 };
 

@@ -5,9 +5,13 @@
  * Communication is via postMessage.
  */
 
-import type { ConversionOptions, EditorOperationResult, EmscriptenModule, WasmLoadPhase, WasmLoadProgress } from './types.js';
+import type { ConversionOptions, EditorOperationResult, EmscriptenModule, PthreadWorkerMode, WasmLoadPhase, WasmLoadProgress } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
 import { FORMAT_FILTER_OPTIONS, OUTPUT_FORMAT_TO_LOK, buildLoadOptions } from './types.js';
+import {
+  locateBrowserRuntimeFile,
+  validateExplicitBrowserWasmPaths,
+} from './browser-runtime-paths.js';
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OperationResult } from './editor/types.js';
 import { LibreOfficeConverter } from './converter.js';
@@ -263,6 +267,7 @@ interface WorkerMessage {
   sofficeJs?: string;
   sofficeWasm?: string;
   sofficeData?: string;
+  pthreadWorkerMode?: PthreadWorkerMode;
   sofficeWorkerJs?: string;
   enableProgressTracking?: boolean;  // Opt-in: enable download progress tracking (disabled by default)
   verbose?: boolean;
@@ -542,12 +547,18 @@ async function handleInit(msg: WorkerMessage) {
     return;
   }
 
-  // Require explicit paths
-  const { sofficeJs, sofficeWasm, sofficeData, sofficeWorkerJs } = msg;
-  if (!sofficeJs || !sofficeWasm || !sofficeData || !sofficeWorkerJs) {
-    postResponse({ type: 'error', id: msg.id, error: 'Missing required WASM paths (sofficeJs, sofficeWasm, sofficeData, sofficeWorkerJs)' });
+  let runtimePaths;
+  try {
+    runtimePaths = validateExplicitBrowserWasmPaths(msg);
+  } catch (error) {
+    postResponse({
+      type: 'error',
+      id: msg.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return;
   }
+  const { sofficeJs, sofficeWasm, sofficeData, pthreadWorkerMode, sofficeWorkerJs } = runtimePaths;
 
   const verbose = msg.verbose || false;
 
@@ -574,21 +585,18 @@ async function handleInit(msg: WorkerMessage) {
 
   try {
     // Configure global Module for Emscripten
-    console.log('[Worker] Setting up Module with explicit paths:', { sofficeJs, sofficeWasm, sofficeData, sofficeWorkerJs });
+    console.log('[Worker] Setting up Module with explicit paths:', {
+      sofficeJs,
+      sofficeWasm,
+      sofficeData,
+      pthreadWorkerMode,
+      sofficeWorkerJs,
+    });
     self.Module = {
       // Tell pthread workers where to load the main module from
       mainScriptUrlOrBlob: sofficeJs,
       locateFile: (path: string, _scriptDir?: string) => {
-        let result: string;
-        if (path.endsWith('.wasm')) result = sofficeWasm;
-        else if (path.endsWith('.data')) result = sofficeData;
-        // Handle both .worker.js and .worker.cjs requests
-        else if (path.includes('.worker.')) result = sofficeWorkerJs;
-        else {
-          // Fallback: derive from sofficeJs path for any other files
-          const baseUrl = sofficeJs.substring(0, sofficeJs.lastIndexOf('/') + 1);
-          result = `${baseUrl}${path}`;
-        }
+        const result = locateBrowserRuntimeFile(path, runtimePaths);
         console.log('[Worker] locateFile called:', path, 'scriptDir:', _scriptDir, '-> result:', result);
         return result;
       },

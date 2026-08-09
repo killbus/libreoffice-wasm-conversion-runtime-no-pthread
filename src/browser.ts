@@ -15,6 +15,7 @@ export type {
   ImageOptions,
   InputFormat,
   LibreOfficeWasmOptions,
+  PthreadWorkerMode,
   BrowserWasmPaths,
   BrowserConverterOptions,
   WorkerBrowserConverterOptions,
@@ -82,7 +83,6 @@ import {
   BrowserWasmPaths,
   OutputFormat,
   ProgressInfo,
-  createWasmPaths,
   ILibreOfficeConverter,
   InputFormatOptions,
   PagePreview,
@@ -96,6 +96,10 @@ import {
   WasmLoadPhase,
 } from './types.js';
 
+import {
+  locateBrowserRuntimeFile,
+  resolveBrowserWasmPaths,
+} from './browser-runtime-paths.js';
 import { LOKBindings } from './lok-bindings.js';
 import {
   NativeConversionError,
@@ -108,6 +112,7 @@ import type { OpenDocumentOptions } from './editor/types.js';
 /** Window with Module property for Emscripten */
 interface EmscriptenWindow extends Window {
   Module?: Partial<EmscriptenModule> & {
+    mainScriptUrlOrBlob?: string;
     locateFile?: (path: string) => string;
     print?: (...args: unknown[]) => void;
     printErr?: (...args: unknown[]) => void;
@@ -178,12 +183,24 @@ export class BrowserConverter {
   private options: ResolvedBrowserConverterOptions;
 
   constructor(options: BrowserConverterOptions = {}) {
-    // Apply defaults for WASM paths using createWasmPaths
-    const defaultPaths = createWasmPaths();
+    const {
+      sofficeJs,
+      sofficeWasm,
+      sofficeData,
+      pthreadWorkerMode,
+      sofficeWorkerJs,
+      ...converterOptions
+    } = options;
     this.options = {
       verbose: false,
-      ...defaultPaths,
-      ...options,
+      ...converterOptions,
+      ...resolveBrowserWasmPaths({
+        sofficeJs,
+        sofficeWasm,
+        sofficeData,
+        pthreadWorkerMode,
+        sofficeWorkerJs,
+      }),
     };
   }
 
@@ -271,7 +288,7 @@ export class BrowserConverter {
   }
 
   private async loadModule(): Promise<EmscriptenModule> {
-    const { sofficeJs, sofficeWasm, sofficeData, sofficeWorkerJs } = this.options;
+    const { sofficeJs } = this.options;
 
     const win = window as EmscriptenWindow;
 
@@ -280,14 +297,8 @@ export class BrowserConverter {
       // Pre-configure the global Module object before loading the script
       // soffice.js checks for existing Module and merges with it
       win.Module = {
-        locateFile: (path: string) => {
-          if (path.endsWith('.wasm')) return sofficeWasm;
-          if (path.endsWith('.data')) return sofficeData;
-          if (path.endsWith('.worker.js') || path.endsWith('.worker.cjs')) return sofficeWorkerJs;
-          // Fallback: derive from sofficeJs path for any other files
-          const baseUrl = sofficeJs.substring(0, sofficeJs.lastIndexOf('/') + 1);
-          return `${baseUrl}${path}`;
-        },
+        mainScriptUrlOrBlob: sofficeJs,
+        locateFile: (path: string) => locateBrowserRuntimeFile(path, this.options),
         print: this.options.verbose ? console.log : () => { },
         printErr: this.options.verbose ? console.error : () => { },
         onRuntimeInitialized: () => {
@@ -632,13 +643,26 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
   private options: ResolvedWorkerBrowserConverterOptions;
 
   constructor(options: WorkerBrowserConverterOptions = {}) {
-    // Apply defaults for WASM paths using createWasmPaths
-    const defaultPaths = createWasmPaths();
+    const {
+      browserWorkerJs,
+      sofficeJs,
+      sofficeWasm,
+      sofficeData,
+      pthreadWorkerMode,
+      sofficeWorkerJs,
+      ...converterOptions
+    } = options;
     this.options = {
       verbose: false,
-      browserWorkerJs: '/dist/browser.worker.global.js',
-      ...defaultPaths,
-      ...options,
+      browserWorkerJs: browserWorkerJs ?? '/dist/browser.worker.global.js',
+      ...converterOptions,
+      ...resolveBrowserWasmPaths({
+        sofficeJs,
+        sofficeWasm,
+        sofficeData,
+        pthreadWorkerMode,
+        sofficeWorkerJs,
+      }),
     };
   }
 
@@ -737,7 +761,10 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
         sofficeJs: this.options.sofficeJs,
         sofficeWasm: this.options.sofficeWasm,
         sofficeData: this.options.sofficeData,
-        sofficeWorkerJs: this.options.sofficeWorkerJs,
+        pthreadWorkerMode: this.options.pthreadWorkerMode,
+        ...(this.options.pthreadWorkerMode === 'external'
+          ? { sofficeWorkerJs: this.options.sofficeWorkerJs }
+          : {}),
         enableProgressTracking: this.options.enableProgressTracking,
         verbose: this.options.verbose,
         fonts: this.options.fonts,
@@ -1710,6 +1737,7 @@ export function createDropZone(
           sofficeJs: options.sofficeJs,
           sofficeWasm: options.sofficeWasm,
           sofficeData: options.sofficeData,
+          pthreadWorkerMode: options.pthreadWorkerMode,
           sofficeWorkerJs: options.sofficeWorkerJs,
           onProgress: options.onProgress ? (p: WasmLoadProgress) => options.onProgress!({ percent: p.percent, message: p.message }) : undefined,
         });
@@ -1755,6 +1783,7 @@ export async function quickConvert(
     sofficeJs: options.sofficeJs,
     sofficeWasm: options.sofficeWasm,
     sofficeData: options.sofficeData,
+    pthreadWorkerMode: options.pthreadWorkerMode,
     sofficeWorkerJs: options.sofficeWorkerJs,
   });
   try {
