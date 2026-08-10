@@ -27,7 +27,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseOptions, CliUsageError } from './lib/cli.mjs'
-import { runGh } from './lib/gh.mjs'
+import { runGh, runGhToFile, uploadReleaseAsset } from './lib/gh.mjs'
 import { runDeterministicDoubleAssembly } from './lib/packager.mjs'
 import { verifyArchive, verifyCandidateManifestFile } from './lib/verifier.mjs'
 import { validateFrozenSpec, validateStagingReport } from './lib/schemata.mjs'
@@ -120,22 +120,50 @@ function buildReleaseNotes({ candidateId, provenance, runtime, assets, archiveSh
   ].join('\n')
 }
 
-async function checkTagDoesNotExist(repo, tag, dryRun) {
-  try {
-    await runGh(['api', `repos/${repo}/releases/tags/${tag}`, '--jq', '.id'])
-    throw new Error(
-      `release/tag ${tag} already exists; refusing to clobber or recreate`
-    )
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (message.includes('Not Found')) {
-      return
+// Draft releases do not materialize a tag ref, so `releases/tags/<tag>` 404s
+// for them and `gh release list --json` exposes no id. List the releases API
+// (drafts included) by tag instead.
+async function listReleasesByTag(repo, tag) {
+  const matches = []
+  let page = 1
+  for (;;) {
+    const rows = await runGh([
+      'api',
+      `repos/${repo}/releases?per_page=100&page=${page}`,
+      '--jq',
+      '[.[] | {id, tag_name}]',
+    ])
+    for (const row of rows) {
+      if (row.tag_name === tag) {
+        matches.push({ id: String(row.id), tagName: row.tag_name })
+      }
     }
-    if (message.includes('already exists')) {
-      throw error
+    if (rows.length < 100) {
+      break
     }
-    throw new Error(`could not confirm release tag absence: ${message}`)
+    page += 1
   }
+  return matches
+}
+
+async function checkTagDoesNotExist(repo, tag, dryRun) {
+  let existing
+  try {
+    existing = await listReleasesByTag(repo, tag)
+  } catch (error) {
+    throw new Error(`could not confirm release tag absence: ${error.message}`)
+  }
+  if (existing.length > 0) {
+    throw new Error(
+      `release/tag ${tag} already exists (release ${existing[0].id}); refusing to clobber or recreate`
+    )
+  }
+  void dryRun
+}
+
+async function findReleaseIdByTag(repo, tag) {
+  const matches = await listReleasesByTag(repo, tag)
+  return matches.length > 0 ? matches[0] : null
 }
 
 async function main(argv) {
@@ -210,27 +238,36 @@ async function main(argv) {
     result.first.standalone.assetSumsPath,
     result.first.standalone.releaseSumsPath,
   ]
-  await runGh([
-    'release',
-    'create',
-    tagName,
-    '--draft',
-    '--repo',
-    repo,
-    '--target',
-    target,
-    '--title',
-    `LibreOffice runtime artifact ${result.candidateId}`,
-    '--notes-file',
-    notesPath,
-    ...assetsToUpload,
-  ])
+  await runGh(
+    [
+      'release',
+      'create',
+      tagName,
+      '--draft',
+      '--repo',
+      repo,
+      '--target',
+      target,
+      '--title',
+      `LibreOffice runtime artifact ${result.candidateId}`,
+      '--notes-file',
+      notesPath,
+      ...assetsToUpload,
+    ],
+    { json: false }
+  )
 
+  // Drafts never get a tag ref, so `releases/tags/<tag>` 404s for them;
+  // locate the newly created draft by listing releases instead.
+  const createdDraft = await findReleaseIdByTag(repo, tagName)
+  if (!createdDraft) {
+    throw new Error(`release ${tagName} was not found immediately after create`)
+  }
   const release = await runGh([
     'api',
-    `repos/${repo}/releases/tags/${tagName}`,
+    `repos/${repo}/releases/${createdDraft.id}`,
     '--jq',
-    '{id, html_url, tag_name, target_commitish, created_at, draft, name, body, assets: [.assets[] | {id, name, contentType: .content_type, size, created_at}]}',
+    '{id, html_url, tag_name, target_commitish, created_at, draft, name, body, assets: [.assets[] | {id, name, contentType: .content_type, size, browser_download_url, created_at}]}',
   ])
 
   if (release.draft !== true) {
@@ -264,6 +301,7 @@ async function main(argv) {
     candidateManifestSha256: result.first.candidateManifestSha256,
     assetSumsSha256: result.first.assetSumsSha256,
     releaseSumsSha256: result.first.releaseSumsSha256,
+    payloadArchiveSha256: result.first.archive.sha256,
     payloadArchive: {
       name: result.first.archive.fileName,
       bytes: result.first.archive.bytes,
@@ -292,6 +330,7 @@ async function main(argv) {
       contentType: asset.contentType,
       bytes: asset.size,
       sha256: asset.digest ?? '',
+      uploadUrl: asset.browser_download_url,
     })),
     stagingReportFile: STAGING_REPORT_FILE,
     noNativeBuild: {
@@ -322,17 +361,26 @@ async function main(argv) {
   const stagingReportPath = join(workRoot, STAGING_REPORT_FILE)
   await writeFile(stagingReportPath, stagingReportBytes, 'utf8')
 
-  // Upload the staging report exactly once (no --clobber; fails if it exists).
-  await runGh(['release', 'upload', tagName, '--repo', repo, stagingReportPath])
-
+  // Upload the staging report exactly once via the uploads API. The API refuses
+  // (422) if an asset with the same name already exists — no --clobber, no
+  // delete-and-reupload.
+  const reportUpload = await uploadReleaseAsset({
+    repo,
+    releaseId: String(release.id),
+    name: STAGING_REPORT_FILE,
+    filePath: stagingReportPath,
+    contentType: 'application/json',
+  })
   const releaseAfter = await runGh([
     'api',
-    `repos/${repo}/releases/tags/${tagName}`,
+    `repos/${repo}/releases/${String(release.id)}`,
     '--jq',
     '(.assets | map({id, name, contentType: .content_type, size}))',
   ])
-  const reportAsset = releaseAfter.find((asset) => asset.name === STAGING_REPORT_FILE)
-  if (!reportAsset) {
+  const reportAsset = reportUpload?.id
+    ? { id: reportUpload.id, name: reportUpload.name, size: reportUpload.size }
+    : undefined
+  if (!reportAsset || reportAsset.name !== STAGING_REPORT_FILE) {
     throw new Error('staging report upload did not produce a release asset')
   }
 
@@ -352,7 +400,27 @@ async function main(argv) {
 
   const preflightRoot = join(workRoot, 'preflight-download')
   await mkdir(preflightRoot, { recursive: true })
-  await runGh(['release', 'download', tagName, '--repo', repo, '--dir', preflightRoot])
+
+  // Drafts never get a tag ref, so `gh release download <tag>` cannot resolve
+  // them. Download each needed asset by its server-side asset ID through the
+  // octet-stream API into a fresh path (this is the "download the draft
+  // through GitHub" preflight step).
+  const preflightAssets = stagingReport.assets.filter(
+    (asset) =>
+      asset.name === result.first.archive.fileName ||
+      asset.name === CANDIDATE_MANIFEST_FILE
+  )
+  for (const asset of preflightAssets) {
+    await runGhToFile(
+      [
+        'api',
+        '-H',
+        'Accept: application/octet-stream',
+        `repos/${repo}/releases/assets/${asset.assetId}`,
+      ],
+      join(preflightRoot, asset.name)
+    )
+  }
 
   const downloadedArchivePath = join(preflightRoot, result.first.archive.fileName)
   const downloadVerifyRoot = join(preflightRoot, 'verify')
@@ -386,6 +454,7 @@ async function main(argv) {
       sha256,
     })),
     stagingReportAssetId: String(reportAsset.id),
+    stagingReportServerDigest: reportUpload.digest ?? '',
     deterministicDoubleAssembly: 'pass',
     verifier: 'verified downloaded bytes',
     downloadedArchiveSha256: downloadedVerification.archiveSha256,
