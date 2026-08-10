@@ -65,6 +65,9 @@ const FLAGS = new Set([
   'dry-run',
 ])
 
+const OPTIONAL_FLAGS = ['spec', 'expected-candidate-id', 'dry-run']
+const BOOL_FLAGS = ['dry-run']
+
 function buildReleaseNotes({ candidateId, provenance, runtime, assets, archiveSha256, archiveName, manifestSha256, assetSumsSha256, tagName, target }) {
   const assetLines = assets
     .map((asset) => `- \`${asset.path}\` — ${asset.bytes} bytes, \`${asset.sha256}\``)
@@ -167,8 +170,11 @@ async function findReleaseIdByTag(repo, tag) {
 }
 
 async function main(argv) {
-  const args = parseOptions(argv, FLAGS, USAGE)
-  const dryRun = args['dry-run'] === 'true' || args['dry-run'] === '1'
+  const args = parseOptions(argv, FLAGS, USAGE, {
+    optional: OPTIONAL_FLAGS,
+    bool: BOOL_FLAGS,
+  })
+  const dryRun = Boolean(args['dry-run'])
   const repo = args.repo
   const target = args.target
   const specRaw = JSON.parse(

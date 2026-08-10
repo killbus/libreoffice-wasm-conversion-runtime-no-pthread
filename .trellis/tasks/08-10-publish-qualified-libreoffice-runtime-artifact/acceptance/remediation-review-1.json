@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-remediation-review",
+  "review": 1,
+  "reviewedAt": "2026-08-10T13:03:05.602Z",
+  "acceptanceOwner": "killbus",
+  "implementationOwner": "TEAM B",
+  "priorAttempt": {
+    "number": 1,
+    "decision": "rejected",
+    "receipt": "acceptance-receipt.rejected.json"
+  },
+  "nextAttempt": {
+    "number": 2,
+    "eligible": false,
+    "started": false
+  },
+  "repositoryState": {
+    "branch": "feat/publish-qualified-libreoffice-runtime-artifact",
+    "head": "0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+    "remediationCommitted": false,
+    "workingTreeRemediationPresent": true
+  },
+  "reviewBoundaries": {
+    "browserGateRerun": false,
+    "coldStartSamplesRerun": false,
+    "nativeBuildTriggered": false,
+    "releaseMutationPerformed": false,
+    "qualifiedManifestGenerated": false,
+    "pdfHowFilesModified": false
+  },
+  "localValidation": [
+    {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "vitest run --exclude \"tests/*converter*.test.ts\"",
+      "status": "passed",
+      "testsPassed": 215,
+      "testsSkipped": 1
+    },
+    {
+      "command": "vitest run tests/release-runtime/workflow-guard.test.ts tests/release-runtime/cli-contract.test.ts",
+      "status": "passed",
+      "testsPassed": 21
+    },
+    {
+      "command": "npm run lint",
+      "status": "passed",
+      "errors": 0,
+      "existingWarnings": 22
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "gateResults": [
+    {
+      "gate": "strict-semver-oracle",
+      "status": "passed-local",
+      "summary": "The executable decision oracle allows strict v<semver> tags and denies vfoo.bar, v1.x, v1..2, and v1.2."
+    },
+    {
+      "gate": "verifier-cli-contract",
+      "status": "passed-local",
+      "summary": "verify.mjs documents required --report-out, treats --spec and --expected-candidate-id as optional, writes its report, and fails closed when --report-out is absent."
+    },
+    {
+      "gate": "downloaded-byte-node-cleanup",
+      "status": "passed",
+      "summary": "An independent rerun against the Attempt 1 downloaded-byte extraction passed positive, reuse, negative, recovery, ABI, and cleanup phases; cleanup records destroyed, moduleReleased, and initializedFalse as true.",
+      "teamBResult": {
+        "path": "temp/2026-08-10-runtime-artifact-acceptance/cleanup-gate-work/node-smoke-result.json",
+        "sha256": "1da71d14c9c548831d72fc574b73456ff1a553f5a6e2e5d430fd101ffb39bb97"
+      },
+      "acceptanceResult": {
+        "path": "temp/2026-08-10-runtime-artifact-acceptance/acceptance-remediation-review/node-smoke-result.json",
+        "sha256": "9c70dcca89b0c95374afed2b9518cfd7c1860858066cc1c5e670761ce904d518"
+      }
+    },
+    {
+      "gate": "semantic-release-workflow-guards",
+      "status": "failed",
+      "summary": "Both workflows execute the repository-local guard before actions/checkout. A clean runner has no scripts/release-runtime/guard-release-tag.mjs at that point, so even release v2.7.3 fails with MODULE_NOT_FOUND instead of preserving semantic-package release behavior. The guards are also not merged to main.",
+      "evidence": {
+        "pagesGuardLine": 52,
+        "pagesCheckoutLine": 55,
+        "fontBundlesGuardLine": 35,
+        "fontBundlesCheckoutLine": 38,
+        "probe": "node scripts/release-runtime/guard-release-tag.mjs release v2.7.3",
+        "probeResult": "MODULE_NOT_FOUND"
+      }
+    },
+    {
+      "gate": "stage-draft-cli-contract",
+      "status": "failed",
+      "summary": "stage-draft.mjs documents [--dry-run] and parses it as a boolean, but does not declare it optional. Omitting the flag fails with Missing required option: --dry-run.",
+      "evidence": {
+        "usageLine": 55,
+        "optionalFlagsLine": 68,
+        "boolFlagsLine": 69,
+        "observedError": "Missing required option: --dry-run"
+      }
+    },
+    {
+      "gate": "pdfhow-full-chromium-candidate",
+      "status": "unresolved",
+      "summary": "The PDFHow cancellation assertion still expects converting while the wrapper can publish finalizing; no remediation delta or new retry-free passing candidate run exists."
+    },
+    {
+      "gate": "five-consecutive-cold-start-samples",
+      "status": "unresolved",
+      "summary": "Attempt 1 cold-start sample 1 remains failed and samples 2-5 remain intentionally unrun."
+    }
+  ],
+  "downloadedByteBinding": {
+    "payloadArchiveSha256": "e9aac8dde2fb627251155fc97651c2bd35bec63b01e39f882d342c024a87de9a",
+    "matchesAttempt1Verification": true,
+    "runtimeFiles": [
+      {
+        "path": "wasm/loader.cjs",
+        "sha256": "7cebd863dcd071a5eb02bc26fa7701e7dc5c865d1e130e5595672e56a34934cf"
+      },
+      {
+        "path": "wasm/soffice.cjs",
+        "sha256": "0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5"
+      },
+      {
+        "path": "wasm/soffice.data",
+        "sha256": "c4b8a92b566d4e0d4723d321ef926e1b9fbeb575d28cdd6466d27fd2c17c5514"
+      },
+      {
+        "path": "wasm/soffice.js",
+        "sha256": "0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5"
+      },
+      {
+        "path": "wasm/soffice.wasm",
+        "sha256": "b24a888550d27d2942ff9c8c9a84e20cd0c852db154e8558647cb9c5294ff291"
+      }
+    ]
+  },
+  "remoteSnapshot": {
+    "checkedAt": "2026-08-10T13:03:05.602Z",
+    "defaultBranchHead": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "featureBranchPresent": false,
+    "pullRequestsForFeatureBranch": [],
+    "releaseId": "367637128",
+    "releaseDraft": true,
+    "releasePublishedAt": null,
+    "releaseTargetCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "releaseAssetInventoryUnchanged": true,
+    "releaseAssetIds": [
+      "508126610",
+      "508126611",
+      "508126612",
+      "508126614",
+      "508140311"
+    ]
+  },
+  "nonBlockingFollowUp": [
+    "Harden node-smoke-gate.cjs with try/finally so destroy runs after intermediate failures or early exits.",
+    "Make an unexpected success in the negative conversion case fail the helper explicitly.",
+    "Add tests that assert checkout precedes repository-local workflow scripts and that an absent boolean option remains optional."
+  ],
+  "blockingGates": [
+    "pdfhow-full-chromium-candidate",
+    "five-consecutive-cold-start-samples",
+    "semantic-release-workflow-guards",
+    "stage-draft-cli-contract"
+  ],
+  "decision": "not-ready",
+  "reason": "The cleanup gap and local strict-semver/verifier fixes are independently confirmed, but two repository-local defects and two retained external acceptance failures still block Attempt 2."
+}

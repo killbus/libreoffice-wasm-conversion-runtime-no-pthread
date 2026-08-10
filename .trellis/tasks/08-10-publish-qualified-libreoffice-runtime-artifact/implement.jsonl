@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Repository-level automation follows the backend layer index; do not invent undocumented package boundaries."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The implementation crosses artifact inputs, packaging, GitHub Releases, release-event workflows, and downstream PDFHow browser consumption."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/artifact-provenance.md","reason":"Frozen candidate identity, exact eight-file hashes, provenance distinctions, and no-build constraint."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/downstream-browser-gate.md","reason":"Existing Chromium evidence, isolated cold-start timeout, and the required independent browser soak boundary."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/release-trigger-preflight.md","reason":"Current Pages/font/semantic release behavior and the default-branch guards required before runtime publication."}

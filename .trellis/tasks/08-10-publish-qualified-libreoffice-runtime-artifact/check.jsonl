@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"Check repository-level automation against the declared backend layer boundary."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review every boundary from immutable inputs through release workflows to independent downstream consumption."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/artifact-provenance.md","reason":"Independently compare paths, byte lengths, hashes, provenance, ABI/schema, pthread mode, and candidate ID."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/downstream-browser-gate.md","reason":"Require the prior timeout disclosure, retry-free five-run soak, and real PDFHow browser evidence."}
+{"file":".trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/research/release-trigger-preflight.md","reason":"Verify runtime publication cannot trigger old-LFS Pages deployment or font --clobber uploads."}

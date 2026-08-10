@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-acceptance-readiness-check",
+  "check": 2,
+  "checkedAt": "2026-08-10T08:12:15Z",
+  "acceptanceOwner": "killbus",
+  "priorReadiness": {
+    "path": "readiness-check-1.json",
+    "sha256": "3d4a73847b1186f9b5b8db4353f65f5f893b63fd01995c0bfa9db4e8844957ed"
+  },
+  "blockingObservations": [
+    {
+      "observation": 1,
+      "at": "2026-08-10T07:38:41.340Z",
+      "evidence": "acceptance-receipt.rejected.json",
+      "result": "attempt-1-rejected-remediation-required"
+    },
+    {
+      "observation": 2,
+      "at": "2026-08-10T08:04:49Z",
+      "evidence": "readiness-check-1.json",
+      "result": "no-remediation-delta"
+    },
+    {
+      "observation": 3,
+      "at": "2026-08-10T08:12:15Z",
+      "evidence": "readiness-check-2.json",
+      "result": "no-remediation-delta"
+    }
+  ],
+  "nextAttempt": {
+    "number": 2,
+    "eligible": false,
+    "started": false
+  },
+  "observedState": {
+    "unchangedFromReadinessCheck1": true,
+    "localImplementationHead": "0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+    "remoteDefaultBranchHead": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "remoteFeatureBranchPresent": false,
+    "pullRequestsForFeatureBranch": [],
+    "releaseId": "367637128",
+    "releaseDraft": true,
+    "releasePublishedAt": null,
+    "releaseUpdatedAt": "2026-08-10T01:54:32Z",
+    "releaseAssetCount": 5,
+    "releaseAssetInventoryUnchanged": true,
+    "latestNativeBuildRunId": "31211473147",
+    "newerNativeBuildExists": false
+  },
+  "unresolvedConditions": [
+    "strict semantic-version release guards are not merged to main",
+    "the verifier CLI contract has no remediation commit",
+    "no remediation evidence exists for the Chromium cancellation progress mismatch and command hang",
+    "no explicit Node converter cleanup evidence has been supplied"
+  ],
+  "requiredExternalChange": [
+    "TEAM B supplies a distinct remediation commit and handoff",
+    "the required workflow guards are merged to the default branch",
+    "all rejected-attempt blockers have reviewable remediation evidence"
+  ],
+  "decision": "blocked-waiting-for-team-b",
+  "reason": "The same external blocking condition has now been observed three consecutive times. No meaningful acceptance execution can proceed without a TEAM B remediation delta, and Attempt 2 remains unstarted."
+}

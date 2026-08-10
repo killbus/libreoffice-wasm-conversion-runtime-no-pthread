@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-acceptance-readiness-check",
+  "check": 3,
+  "checkedAt": "2026-08-10T13:22:22.861Z",
+  "acceptanceOwner": "killbus",
+  "trigger": {
+    "description": "A new TEAM B remediation report was announced, but no report body or persisted handoff record was supplied.",
+    "persistedHandoffFound": false,
+    "newTaskEvidenceFound": false,
+    "newCommitFound": false
+  },
+  "priorRemediationReview": {
+    "path": "remediation-review-1.json",
+    "sha256": "991c5a869f92c36a674ec4c5d13a53dec06e75b23d1fda13dfbcc1a788872fc3",
+    "decision": "not-ready"
+  },
+  "nextAttempt": {
+    "number": 2,
+    "eligible": false,
+    "started": false
+  },
+  "repositoryState": {
+    "branch": "feat/publish-qualified-libreoffice-runtime-artifact",
+    "head": "0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+    "headUnchangedFromRemediationReview1": true,
+    "workingTreeRemediationStillUncommitted": true
+  },
+  "admissionRequirements": [
+    {
+      "item": "mandatory-acceptance-handoff-record",
+      "status": "missing",
+      "requiredBy": [
+        "prd.md R5.1",
+        "implement.md section 6"
+      ],
+      "missingEvidence": [
+        "new report body or persisted handoff record",
+        "distinct remediation commit and verifier version",
+        "workflow-guard commit and event/tag result",
+        "updated implementation checks bound to the remediation",
+        "explicit disclosure of the retained Chromium and cold-start failures"
+      ]
+    },
+    {
+      "item": "semantic-release-workflow-guards",
+      "status": "failed",
+      "evidence": "pages.yml and font-bundles.yml still execute scripts/release-runtime/guard-release-tag.mjs before actions/checkout; a clean-runner v2.7.3 probe fails with MODULE_NOT_FOUND."
+    },
+    {
+      "item": "stage-draft-cli-contract",
+      "status": "failed",
+      "evidence": "stage-draft.mjs still places dry-run only in BOOL_FLAGS, not OPTIONAL_FLAGS; omitting the documented optional flag fails with Missing required option: --dry-run."
+    },
+    {
+      "item": "pdfhow-full-chromium-candidate",
+      "status": "unresolved",
+      "evidence": "PDFHow remains at a307a616b8f39a86c268b322bcd73bb93d229576 with no change to the three reviewed files; office-browser.playwright.ts still expects converting while the engine can emit finalizing."
+    },
+    {
+      "item": "five-consecutive-cold-start-samples",
+      "status": "unresolved",
+      "evidence": "Attempt 1 sample 1 remains failed; samples 2-5 remain intentionally unrun and no new retry-free evidence was supplied."
+    }
+  ],
+  "testCoverageObservation": {
+    "command": "pnpm exec vitest run tests/release-runtime/workflow-guard.test.ts tests/release-runtime/cli-contract.test.ts",
+    "result": "passed",
+    "testsPassed": 21,
+    "coverageSufficientForAdmission": false,
+    "reason": "Both direct execution probes still fail, proving the green tests do not cover checkout ordering or an absent boolean option through stage-draft.mjs."
+  },
+  "remoteSnapshot": {
+    "defaultBranchHead": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "featureBranchPresent": false,
+    "pullRequestsForFeatureBranch": [],
+    "releaseId": "367637128",
+    "releaseDraft": true,
+    "releasePublishedAt": null,
+    "releaseTargetCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "releaseAssetInventoryUnchanged": true,
+    "latestNativeBuildRunId": "31211473147",
+    "newerNativeBuildExists": false
+  },
+  "safetyInvariants": {
+    "browserGateRerun": false,
+    "coldStartSamplesRerun": false,
+    "nativeBuildTriggered": false,
+    "releaseMutationPerformed": false,
+    "qualifiedManifestGenerated": false,
+    "pdfHowFilesModified": false
+  },
+  "blockingGates": [
+    "mandatory-acceptance-handoff-record",
+    "pdfhow-full-chromium-candidate",
+    "five-consecutive-cold-start-samples",
+    "semantic-release-workflow-guards",
+    "stage-draft-cli-contract"
+  ],
+  "decision": "handoff-incomplete",
+  "reason": "No new TEAM B report or persisted handoff exists, and the four previously identified acceptance blockers remain reproducible or unresolved. Acceptance Attempt 2 was not admitted."
+}

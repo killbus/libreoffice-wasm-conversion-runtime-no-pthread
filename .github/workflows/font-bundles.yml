@@ -14,10 +14,15 @@ jobs:
     # Semantic release-trigger isolation (see .trellis/tasks/08-10-.../design.md §6):
     #   - keep deliberate manual dispatch working;
     #   - for release.published, run the font --clobber upload loop only for
-    #     semantic-package tags (v<semver>); deny runtime-artifact-*, empty and
-    #     malformed tags so a dedicated runtime release can never reach it;
-    #   - decision mirror in scripts/release-runtime/lib/workflow-decision.mjs
-    #     is covered by tests/release-runtime/workflow-guard.test.ts.
+    #     strict semantic-package tags (v<major>.<minor>.<patch>); deny the
+    #     runtime namespace and any malformed tag. This job-level `if:` is a
+    #     coarse structural gate (dispatch allowed; release only for tags that
+    #     start with "v", contain a ".", and do not contain "runtime"). The
+    #     strict allow-list and runtime-namespace denial are enforced
+    #     fail-closed by the first repository-local command after checkout
+    #     (guard-release-tag.mjs), which uses the same executable oracle
+    #     (lib/workflow-decision.mjs) as the acceptance probe. Malformed tags
+    #     must fail that step before any upload.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') && contains(github.event.release.tag_name, '.') && !contains(github.event.release.tag_name, 'runtime')) }}
     runs-on: ubuntu-latest
     permissions:
@@ -27,6 +32,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Enforce strict semantic-version release tag (fail closed)
+        if: github.event_name == 'release'
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/release-runtime/guard-release-tag.mjs "$GITHUB_EVENT_NAME" "$GITHUB_RELEASE_TAG"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

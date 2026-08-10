@@ -38,8 +38,10 @@ const FLAGS = new Set([
   'expected-candidate-id',
 ])
 
+const OPTIONAL_FLAGS = ['spec', 'expected-candidate-id']
+
 async function main(argv) {
-  const args = parseOptions(argv, FLAGS, USAGE)
+  const args = parseOptions(argv, FLAGS, USAGE, { optional: OPTIONAL_FLAGS })
   const specRaw = JSON.parse(
     await readFile(resolve(args.spec ?? DEFAULT_SPEC), 'utf8')
   )

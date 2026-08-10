@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-acceptance-receipt",
+  "decision": "rejected",
+  "releaseQualified": false,
+  "candidateId": "21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+  "payloadArchiveSha256": "e9aac8dde2fb627251155fc97651c2bd35bec63b01e39f882d342c024a87de9a",
+  "releaseId": "367637128",
+  "releaseUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/releases/tag/untagged-dc0c60d518acc26b2117",
+  "tagName": "runtime-artifact-21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+  "targetCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+  "verifierVersion": "scripts/release-runtime/verify.mjs@0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+  "acceptanceOwner": "killbus",
+  "generatedAt": "2026-08-10T07:38:41.340Z",
+  "gateResults": [
+    {
+      "gate": "draft-release-identity-and-inventory",
+      "status": "passed",
+      "summary": "GitHub API returned the expected draft release, target, tag, and five immutable asset identities."
+    },
+    {
+      "gate": "archive-preflight-and-byte-identity",
+      "status": "passed",
+      "summary": "Independent download, safe extraction, candidate identity, provenance, ABI, pthread mode, exact eight-file inventory, sizes, and hashes matched."
+    },
+    {
+      "gate": "downloaded-byte-node-smoke",
+      "status": "partial",
+      "summary": "DOCX-to-PDF, reuse, negative, recovery, and ABI checks passed against downloaded bytes; the bespoke script did not explicitly evidence converter cleanup."
+    },
+    {
+      "gate": "pdfhow-full-chromium-candidate",
+      "status": "failed",
+      "summary": "The retry-free Chromium gate failed at tests/office-conversion/office-browser.playwright.ts:501:58: expected cancellation lastProgress.phase 'converting', received 'finalizing'. The outer command was then terminated after 604.1 seconds with exit code 124."
+    },
+    {
+      "gate": "five-consecutive-cold-start-samples",
+      "status": "failed",
+      "summary": "Fresh-browser sample 1 failed and timed out at the command boundary; samples 2-5 were not run, as required by fail-closed/no-retry acceptance."
+    },
+    {
+      "gate": "semantic-release-workflow-guards",
+      "status": "failed",
+      "summary": "Default branch main remains at df3f73c789e6d2abf71cbcd75186118d2bbc795a without either guard. The feature-branch structural check also incorrectly allows malformed tags including vfoo.bar, v1.x, v1..2, and v1.2."
+    },
+    {
+      "gate": "no-new-native-build",
+      "status": "passed",
+      "summary": "GitHub Actions shows Build WASM run 31211473147 as the newest run for workflow 325462492; no later native build exists."
+    },
+    {
+      "gate": "verifier-cli-contract",
+      "status": "failed",
+      "summary": "verify.mjs help presents --spec and --expected-candidate-id as optional and omits --report-out, while parseOptions requires all three."
+    },
+    {
+      "gate": "draft-remains-unqualified",
+      "status": "passed",
+      "summary": "Release 367637128 remains draft with published_at null; downloaded and PDFHow-local candidate metadata both retain releaseQualified false."
+    }
+  ],
+  "rejectionReasons": [
+    "The mandatory retry-free PDFHow Chromium candidate gate failed and the command boundary timed out.",
+    "The first cold-start sample failed; five consecutive passing samples do not exist.",
+    "Release-trigger guards are not present on the default branch.",
+    "The proposed release-tag guard is not a strict v<semver> guard and allows malformed release tags."
+  ],
+  "requiredRemediation": [
+    "Preserve this failed sample and diagnose the cancellation progress-state mismatch and post-failure command hang before a distinct acceptance attempt.",
+    "Implement and test strict semantic-version release gating, then merge both workflow guards to the default branch before publication.",
+    "Make verifier optional arguments match its documented CLI contract and include --report-out in help.",
+    "Retain the draft and releaseQualified false; do not finalize, publish, replace payload assets, or trigger a native build."
+  ],
+  "evidenceManifest": "acceptance-evidence.json"
+}

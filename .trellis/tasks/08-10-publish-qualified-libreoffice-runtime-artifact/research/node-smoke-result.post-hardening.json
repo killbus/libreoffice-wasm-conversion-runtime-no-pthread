@@ -1,0 +1,65 @@
+{
+  "gate": "node-smoke",
+  "startedAt": "2026-08-10T17:25:06.254Z",
+  "inputDocx": "D:\\Repositories\\libreoffice-wasm-conversion-runtime\\tests\\sample_2_page.docx",
+  "inputDocxSha256": "23b8af4d364972f88b163e026ae47db91e2c8593cdb96e5321b999803eaa5180",
+  "inputDocxBytes": 17986,
+  "wasmDir": "D:\\Repositories\\libreoffice-wasm-conversion-runtime\\temp\\2026-08-10-runtime-artifact-acceptance\\extract\\wasm",
+  "phases": [
+    {
+      "phase": "init-start",
+      "wasmDir": "D:\\Repositories\\libreoffice-wasm-conversion-runtime\\temp\\2026-08-10-runtime-artifact-acceptance\\extract\\wasm"
+    },
+    {
+      "phase": "init-done",
+      "ms": 215192
+    },
+    {
+      "phase": "positive",
+      "ms": 4036,
+      "pdfBytes": 42173,
+      "pdfHead": "%PDF-",
+      "pdfSha256": "50a7f494dcccec1ba37ee1a75c13775368e5669452b494a82e26029a49e42d5f",
+      "mimeType": "application/pdf",
+      "filename": "input.pdf"
+    },
+    {
+      "phase": "reuse",
+      "ms": 1355,
+      "pdfBytes": 42173,
+      "pdfHead": "%PDF-",
+      "pdfSha256": "9e01f4715b8abdb53bd18568633eba124eaec26c9dbe422dbc66232fadf2b1ca"
+    },
+    {
+      "phase": "negative",
+      "ms": 1,
+      "case": "unsupported-format",
+      "rejected": true,
+      "errorType": "ConversionError",
+      "message": "Unsupported output format: mp3"
+    },
+    {
+      "phase": "recovery",
+      "ms": 652,
+      "pdfBytes": 42173,
+      "pdfHead": "%PDF-",
+      "pdfSha256": "7e67cbe881272c9866f9cf3709ef9b70bad8649e935ea3ced36a9eb25ed91281"
+    },
+    {
+      "phase": "abi-exports",
+      "hasLokConvertDocument": true,
+      "hasLokConvertFree": true,
+      "hasLibreofficekitHook": true,
+      "hasMalloc": true
+    },
+    {
+      "phase": "cleanup",
+      "ms": 10,
+      "destroyed": true,
+      "moduleReleased": true,
+      "initializedFalse": true
+    }
+  ],
+  "status": "passed",
+  "finishedAt": "2026-08-10T17:28:47.516Z"
+}

@@ -31,11 +31,17 @@ jobs:
   build:
     # Semantic release-trigger isolation (see .trellis/tasks/08-10-.../design.md §6):
     #   - keep deliberate manual dispatch working;
-    #   - for release.published, deploy Pages only for semantic-package tags
-    #     (v<semver>: starts with "v", contains a ".", does not contain the
-    #     runtime namespace); deny runtime-artifact-*, empty/malformed tags;
-    #   - decision mirror in scripts/release-runtime/lib/workflow-decision.mjs
-    #     is covered by tests/release-runtime/workflow-guard.test.ts.
+    #   - for release.published, deploy Pages only for strict semantic-package
+    #     tags (v<major>.<minor>.<patch>, optionally -pre/+build). This
+    #     job-level `if:` is a coarse structural gate (dispatch allowed; release
+    #     only for tags that start with "v", contain a ".", and do not contain
+    #     the runtime namespace). GitHub expressions cannot express a regex, so
+    #     the strict allow-list and the runtime-namespace denial are enforced
+    #     fail-closed by the first repository-local command after checkout
+    #     (guard-release-tag.mjs), which uses the same executable oracle
+    #     (lib/workflow-decision.mjs) that the acceptance probe matrix checks.
+    #     Malformed tags (vfoo.bar, v1.x, v1..2, v1.2) and anything in the
+    #     runtime namespace must fail that step.
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') && contains(github.event.release.tag_name, '.') && !contains(github.event.release.tag_name, 'runtime')) }}
     runs-on: ubuntu-latest
     steps:
@@ -43,6 +49,13 @@ jobs:
         uses: actions/checkout@v7
         with:
           lfs: true
+
+      - name: Enforce strict semantic-version release tag (fail closed)
+        if: github.event_name == 'release'
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/release-runtime/guard-release-tag.mjs "$GITHUB_EVENT_NAME" "$GITHUB_RELEASE_TAG"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

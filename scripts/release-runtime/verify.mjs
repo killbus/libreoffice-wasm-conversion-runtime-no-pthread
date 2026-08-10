@@ -8,6 +8,7 @@
 //   node scripts/release-runtime/verify.mjs \
 //     --archive <payload.zip> \
 //     --extract-root <fresh-dir> \
+//     --report-out <report.json> \
 //     [--spec <file>] \
 //     [--expected-candidate-id <hex>]
 
@@ -27,19 +28,22 @@ const USAGE = `Usage:
   node scripts/release-runtime/verify.mjs \\
     --archive <payload.zip> \\
     --extract-root <fresh-dir> \\
+    --report-out <report.json> \\
     [--spec <file>] \\
     [--expected-candidate-id <hex>]`
 
 const FLAGS = new Set([
   'archive',
   'extract-root',
+  'report-out',
   'spec',
   'expected-candidate-id',
-  'report-out',
 ])
 
+const OPTIONAL_FLAGS = ['spec', 'expected-candidate-id']
+
 async function main(argv) {
-  const args = parseOptions(argv, FLAGS, USAGE)
+  const args = parseOptions(argv, FLAGS, USAGE, { optional: OPTIONAL_FLAGS })
   const specRaw = JSON.parse(
     await readFile(resolve(args.spec ?? DEFAULT_SPEC), 'utf8')
   )

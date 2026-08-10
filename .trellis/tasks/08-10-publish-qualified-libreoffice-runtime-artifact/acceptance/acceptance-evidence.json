@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-acceptance-evidence",
+  "generatedAt": "2026-08-10T07:38:41.340Z",
+  "acceptanceOwner": "killbus",
+  "decision": "rejected",
+  "identity": {
+    "releaseId": "367637128",
+    "releaseUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/releases/tag/untagged-dc0c60d518acc26b2117",
+    "tagName": "runtime-artifact-21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+    "targetCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "candidateId": "21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+    "payloadArchiveSha256": "e9aac8dde2fb627251155fc97651c2bd35bec63b01e39f882d342c024a87de9a",
+    "payloadArchiveBytes": 248934231
+  },
+  "releaseSnapshot": {
+    "source": "GitHub REST API release 367637128",
+    "draft": true,
+    "prerelease": false,
+    "publishedAt": null,
+    "assetCount": 5,
+    "assets": [
+      {
+        "id": "508126612",
+        "name": "ASSET-SHA256SUMS",
+        "bytes": 677,
+        "sha256": "83bb7bb697dcf4b8feb59934ad928aa22b8d87c18104ebeed451a3eb7aff9c32"
+      },
+      {
+        "id": "508126611",
+        "name": "CANDIDATE-MANIFEST.json",
+        "bytes": 2365,
+        "sha256": "c33b76b49346b08d0cdcbf1ce64db3025f9ceacd29113664279c56e0dae8dab0"
+      },
+      {
+        "id": "508126614",
+        "name": "libreoffice-wasm-runtime-21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b.zip",
+        "bytes": 248934231,
+        "sha256": "e9aac8dde2fb627251155fc97651c2bd35bec63b01e39f882d342c024a87de9a"
+      },
+      {
+        "id": "508126610",
+        "name": "SHA256SUMS",
+        "bytes": 333,
+        "sha256": "df1e89e0364660c75d00fcaa4cf77fbd80176986812a8009e9a3e176e9bc9dac"
+      },
+      {
+        "id": "508140311",
+        "name": "STAGING-REPORT.json",
+        "bytes": 4571,
+        "sha256": "2094842f73c67cd31481741480a27646607f4a18eda3337bf5dfaebc714c7cc6"
+      }
+    ]
+  },
+  "downloadAndVerification": {
+    "downloadRoot": "D:\\tmp\\lo-runtime-acceptance-367637128-20260810-1251",
+    "extractRoot": "D:\\tmp\\lo-runtime-acceptance-367637128-20260810-1251\\verified-extract",
+    "status": "passed",
+    "verificationReport": "D:\\Repositories\\libreoffice-wasm-conversion-runtime\\temp\\2026-08-10-runtime-artifact-acceptance\\evidence\\verify-report.json",
+    "verificationReportSha256": "6542fdd09d1fb6b3941841ab0b3da9cf3d6f3df19cf0ca698be03298e37026b5",
+    "candidateManifestSha256": "c33b76b49346b08d0cdcbf1ce64db3025f9ceacd29113664279c56e0dae8dab0",
+    "runtimeAssetCount": 8,
+    "abi": "lok-convert-document-v1",
+    "pthreadWorkerMode": "main-script",
+    "externalWorker": null,
+    "forbiddenWorkerPresent": false
+  },
+  "nodeSmoke": {
+    "result": "passed-with-coverage-gap",
+    "resultFile": "D:\\Repositories\\libreoffice-wasm-conversion-runtime\\temp\\2026-08-10-runtime-artifact-acceptance\\evidence\\node-smoke-result.json",
+    "resultFileSha256": "4ee7a3a398aa2432074715da19366a2152420c31c88c2b940cfdb42af1bbf0f5",
+    "inputDocxSha256": "6d92f06a4e316117a461fb505d899e08d6f291fcf17b2d7b90073d5f620d5340",
+    "positivePdfHeader": "%PDF-",
+    "reusePassed": true,
+    "negativePassed": true,
+    "recoveryPassed": true,
+    "abiExportsPassed": true,
+    "coverageGap": "The bespoke gate did not explicitly dispose the converter or otherwise record clean cleanup."
+  },
+  "pdfHowCandidate": {
+    "root": "D:\\Repositories\\pdfhow.com-next\\third_party\\libreoffice-wasm-conversion-runtime-dev",
+    "metadata": "LOCAL-CANDIDATE-METADATA.json",
+    "metadataSha256": "4ea5cee225efaa9874d48105e74c7c4cd09a3c664b8f531ef38c364d556194d3",
+    "candidateIdMatches": true,
+    "releaseQualified": false,
+    "fixture": "D:\\tmp\\lo-post-baseline-trim-wip\\test.docx",
+    "fixtureBytes": 6693403,
+    "fixtureSha256": "a78495545ae41486aa61c9a0e8c4c78f6491a8e7b3cfacbd4185ed0f124f59df"
+  },
+  "chromiumGate": {
+    "result": "failed",
+    "attemptRole": "full retry-free candidate gate and fresh-browser cold-start sample 1",
+    "command": "pnpm exec playwright test tests/office-conversion/office-browser.playwright.ts --config playwright.config.ts --reporter=line",
+    "environment": {
+      "CI": null,
+      "OFFICE_RUNTIME_ROOT": "D:\\Repositories\\pdfhow.com-next\\third_party\\libreoffice-wasm-conversion-runtime-dev",
+      "OFFICE_BROWSER_DOCX_FIXTURE": "D:\\tmp\\lo-post-baseline-trim-wip\\test.docx"
+    },
+    "commandBoundary": {
+      "durationMs": 604100,
+      "exitCode": 124,
+      "terminalStdoutCaptured": false,
+      "persistentRunLogOnlyContainsStartupBanner": true
+    },
+    "playwrightTrace": {
+      "version": "1.61.1",
+      "declaredTestTimeoutMs": 720000,
+      "wallTimeUnixMs": 1786345496015,
+      "failureOffsetMs": 193873.011,
+      "cleanupFinishedOffsetMs": 195626.624
+    },
+    "assertionFailure": {
+      "test": "validates conversion, recovery, assets, and teardown in local-candidate mode",
+      "source": "tests/office-conversion/office-browser.playwright.ts:501:58",
+      "expected": "converting",
+      "received": "finalizing",
+      "snapshotLastErrorCode": "CANCELLED",
+      "snapshotConversions": 6,
+      "snapshotCancellations": 1,
+      "snapshotDisposals": 0
+    },
+    "failedTests": [
+      "e03ff9bb6c411fc20147-57e8d97610f8ef3f8b02"
+    ],
+    "postRunInspection": {
+      "matchingPlaywrightOrPdfHowProcesses": 0,
+      "listenersOnPort5174": 0
+    },
+    "retryPerformed": false,
+    "coldStartSamples": [
+      {
+        "run": 1,
+        "result": "failed",
+        "commandExitCode": 124
+      },
+      {
+        "run": 2,
+        "result": "not-run-after-failure"
+      },
+      {
+        "run": 3,
+        "result": "not-run-after-failure"
+      },
+      {
+        "run": 4,
+        "result": "not-run-after-failure"
+      },
+      {
+        "run": 5,
+        "result": "not-run-after-failure"
+      }
+    ]
+  },
+  "retainedBrowserDiagnostics": {
+    "root": "D:\\tmp\\lo-runtime-acceptance-367637128-20260810-1251\\browser-gate-failure",
+    "files": [
+      {
+        "path": ".last-run.json",
+        "bytes": 96,
+        "sha256": "3a3dd27f4427ddfee447e94522f127b3f0c550b8148d46910c9fe62d23df6e41"
+      },
+      {
+        "path": "office-browser.playwright.-2b554-own-in-local-candidate-mode/error-context.md",
+        "bytes": 9314,
+        "sha256": "f4a85a7e69efc7d3eff30a9b981a04c2e68cb22bb629552829ab3f4de1928c25"
+      },
+      {
+        "path": "office-browser.playwright.-2b554-own-in-local-candidate-mode/trace.zip",
+        "bytes": 9016399,
+        "sha256": "38982a380479a47be96928691f67079e54704e86dcc07b0496f2983ccb241de0"
+      },
+      {
+        "path": "office-browser.playwright.-2b554-own-in-local-candidate-mode/video.webm",
+        "bytes": 855523,
+        "sha256": "43efdda9bffe7017d326211cb817e45c8dc9598b8f96ade180d60336bfe878fa"
+      }
+    ]
+  },
+  "workflowGuards": {
+    "result": "failed",
+    "defaultBranch": "main",
+    "defaultBranchCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "guardsPresentOnDefaultBranch": false,
+    "defaultBranchWorkflowBlobs": {
+      ".github/workflows/pages.yml": "73d4a5182ccc3301791fe26c997a352a2548f6cd",
+      ".github/workflows/font-bundles.yml": "eef16a2804ed592c58a57c257e9627034b3c1397"
+    },
+    "featureBranchHead": "0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+    "malformedTagProbe": [
+      {
+        "tag": "vfoo.bar",
+        "allowed": true
+      },
+      {
+        "tag": "v1.x",
+        "allowed": true
+      },
+      {
+        "tag": "v1..2",
+        "allowed": true
+      },
+      {
+        "tag": "v1.2",
+        "allowed": true
+      }
+    ]
+  },
+  "nativeBuild": {
+    "result": "passed",
+    "workflowId": "325462492",
+    "workflowName": "Build WASM",
+    "newestRunId": "31211473147",
+    "newestRunCreatedAt": "2026-08-07T19:26:24Z",
+    "newestRunHeadCommit": "71d33678ed74872ebbb1bc37f5778143f8f5e401",
+    "newerRunExists": false
+  },
+  "verifierCliContract": {
+    "result": "failed",
+    "helpDocumentsReportOut": false,
+    "helpMarksSpecOptional": true,
+    "helpMarksExpectedCandidateIdOptional": true,
+    "parserRequiresReportOut": true,
+    "parserRequiresSpec": true,
+    "parserRequiresExpectedCandidateId": true,
+    "observedErrorWhenReportOutOmitted": "Missing required option: --report-out"
+  }
+}

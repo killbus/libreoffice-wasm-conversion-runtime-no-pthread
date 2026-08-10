@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-acceptance-readiness-check",
+  "check": 1,
+  "checkedAt": "2026-08-10T08:04:49Z",
+  "acceptanceOwner": "killbus",
+  "priorAttempt": {
+    "number": 1,
+    "decision": "rejected",
+    "receipt": "acceptance-receipt.rejected.json"
+  },
+  "nextAttempt": {
+    "number": 2,
+    "eligible": false,
+    "started": false
+  },
+  "localImplementation": {
+    "branch": "feat/publish-qualified-libreoffice-runtime-artifact",
+    "head": "0b2bf1654994db0dd524ce8f6ca32ab5dce7c348",
+    "headMatchesRejectedAttempt": true,
+    "trackedImplementationChangesPresent": false
+  },
+  "githubImplementation": {
+    "defaultBranch": "main",
+    "defaultBranchHead": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "defaultBranchHeadMatchesRejectedAttempt": true,
+    "featureBranch": "feat/publish-qualified-libreoffice-runtime-artifact",
+    "featureBranchPresent": false,
+    "pullRequestsForFeatureBranch": []
+  },
+  "release": {
+    "id": "367637128",
+    "draft": true,
+    "publishedAt": null,
+    "updatedAt": "2026-08-10T01:54:32Z",
+    "tagName": "runtime-artifact-21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+    "targetCommit": "df3f73c789e6d2abf71cbcd75186118d2bbc795a",
+    "assetCount": 5,
+    "assetInventoryUnchangedFromAttempt1": true,
+    "assets": [
+      {
+        "id": "508126612",
+        "name": "ASSET-SHA256SUMS",
+        "bytes": 677,
+        "sha256": "83bb7bb697dcf4b8feb59934ad928aa22b8d87c18104ebeed451a3eb7aff9c32"
+      },
+      {
+        "id": "508126611",
+        "name": "CANDIDATE-MANIFEST.json",
+        "bytes": 2365,
+        "sha256": "c33b76b49346b08d0cdcbf1ce64db3025f9ceacd29113664279c56e0dae8dab0"
+      },
+      {
+        "id": "508126614",
+        "name": "libreoffice-wasm-runtime-21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b.zip",
+        "bytes": 248934231,
+        "sha256": "e9aac8dde2fb627251155fc97651c2bd35bec63b01e39f882d342c024a87de9a"
+      },
+      {
+        "id": "508126610",
+        "name": "SHA256SUMS",
+        "bytes": 333,
+        "sha256": "df1e89e0364660c75d00fcaa4cf77fbd80176986812a8009e9a3e176e9bc9dac"
+      },
+      {
+        "id": "508140311",
+        "name": "STAGING-REPORT.json",
+        "bytes": 4571,
+        "sha256": "2094842f73c67cd31481741480a27646607f4a18eda3337bf5dfaebc714c7cc6"
+      }
+    ]
+  },
+  "nativeBuild": {
+    "workflowId": "325462492",
+    "latestRunId": "31211473147",
+    "latestRunCreatedAt": "2026-08-07T19:26:24Z",
+    "latestRunHeadCommit": "71d33678ed74872ebbb1bc37f5778143f8f5e401",
+    "newerRunExists": false
+  },
+  "remediationReadiness": [
+    {
+      "item": "strict-semver-release-guards-on-default-branch",
+      "status": "not-remediated",
+      "evidence": "main remains at the same pre-guard commit recorded by rejected attempt 1"
+    },
+    {
+      "item": "verifier-cli-contract",
+      "status": "not-remediated",
+      "evidence": "the local implementation HEAD is unchanged from rejected attempt 1 and no remote feature branch exists"
+    },
+    {
+      "item": "chromium-cancellation-progress-and-command-hang",
+      "status": "no-remediation-evidence",
+      "evidence": "no distinct TEAM B remediation commit or handoff was supplied"
+    },
+    {
+      "item": "explicit-node-converter-cleanup-evidence",
+      "status": "no-remediation-evidence",
+      "evidence": "no distinct TEAM B remediation commit or handoff was supplied"
+    }
+  ],
+  "decision": "not-ready",
+  "reason": "No qualifying remediation delta exists. Attempt 2 was not started, and no browser or cold-start gate was rerun."
+}
