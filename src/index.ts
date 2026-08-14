@@ -84,7 +84,20 @@ export {
 
 import { LibreOfficeConverter } from './converter-node.js';
 import { createSubprocessConverter } from './subprocess.worker-converter.js';
-import type { ConversionOptions, ConversionResult, ImageOptions, LibreOfficeWasmOptions } from './types.js';
+import {
+  ConversionError,
+  ConversionErrorCode,
+  FORMAT_FILTERS,
+  getConversionErrorMessage,
+  isConversionValid,
+} from './types.js';
+import type {
+  ConversionOptions,
+  ConversionResult,
+  ImageOptions,
+  LibreOfficeWasmOptions,
+  OutputFormat,
+} from './types.js';
 
 /**
  * Image format options for exportAsImage
@@ -95,6 +108,27 @@ export type ImageFormat = 'png' | 'jpg' | 'svg';
 const isNode = typeof process !== 'undefined' &&
   process.versions != null &&
   process.versions.node != null;
+
+function validateConversionOptions(options: ConversionOptions): void {
+  const outputFormat = options.outputFormat;
+
+  if (!FORMAT_FILTERS[outputFormat]) {
+    throw new ConversionError(
+      ConversionErrorCode.UNSUPPORTED_FORMAT,
+      `Unsupported output format: ${outputFormat}`
+    );
+  }
+
+  if (
+    options.inputFormat &&
+    !isConversionValid(options.inputFormat, outputFormat)
+  ) {
+    throw new ConversionError(
+      ConversionErrorCode.UNSUPPORTED_FORMAT,
+      getConversionErrorMessage(options.inputFormat, outputFormat)
+    );
+  }
+}
 
 /**
  * Create a configured LibreOffice converter instance
@@ -142,6 +176,9 @@ export async function convertDocument(
   options: ConversionOptions,
   converterOptions?: LibreOfficeWasmOptions
 ): Promise<ConversionResult> {
+  // Reject deterministic contract failures before initializing WASM or a subprocess.
+  validateConversionOptions(options);
+
   // In Node.js, use subprocess for clean exit (no hanging pthread workers)
   // SubprocessConverter only supports basic conversions, not image/page options
   const isBasicConversion = !options.image;
@@ -271,8 +308,6 @@ export function getValidOutputFormatsFor(inputFormat: string): OutputFormat[] {
   return LibreOfficeConverter.getValidOutputFormats(inputFormat);
 }
 
-// Re-export OutputFormat type for the isOutputFormatSupported function
-import type { OutputFormat } from './types.js';
 
 // ============================================
 // Editor API (LLM-friendly document editing)
