@@ -11,7 +11,7 @@ on:
 
 jobs:
   release:
-    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.repository == 'matbeedotcom/libreoffice-document-converter' && (github.event_name == 'push' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
