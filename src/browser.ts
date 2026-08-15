@@ -105,9 +105,12 @@ import {
   NativeConversionError,
   assertNativeConversionSucceeded,
   createNativeConversionRequest,
+  runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OpenDocumentOptions } from './editor/types.js';
+import { terminateExportedPThreads } from './emscripten-pthread.js';
+import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 
 /** Window with Module property for Emscripten */
 interface EmscriptenWindow extends Window {
@@ -124,18 +127,6 @@ interface EmscriptenWindow extends Window {
 /** Internal LOK bindings with lokPtr - use unknown cast for private property access */
 interface LOKBindingsInternal {
   lokPtr?: number;
-}
-
-interface EmscriptenWorker {
-  terminate?: () => void;
-}
-
-interface EmscriptenModuleWithPThread extends EmscriptenModule {
-  PThread?: {
-    terminateAllThreads?: () => void;
-    runningWorkers?: EmscriptenWorker[];
-    unusedWorkers?: EmscriptenWorker[];
-  };
 }
 
 /** Editor session info (internal worker type) */
@@ -205,22 +196,7 @@ export class BrowserConverter {
   }
 
   private terminatePThreads(targetModule: EmscriptenModule | null): void {
-    if (!targetModule) return;
-
-    try {
-      const pthread = (targetModule as EmscriptenModuleWithPThread).PThread;
-      pthread?.terminateAllThreads?.();
-      for (const worker of pthread?.runningWorkers ?? []) {
-        worker.terminate?.();
-      }
-      for (const worker of pthread?.unusedWorkers ?? []) {
-        worker.terminate?.();
-      }
-      if (pthread?.runningWorkers) pthread.runningWorkers = [];
-      if (pthread?.unusedWorkers) pthread.unusedWorkers = [];
-    } catch {
-      // A discarded runtime stays unusable even if thread termination reports an error.
-    }
+    terminateExportedPThreads(targetModule);
   }
 
   private quarantineRuntime(): void {
@@ -296,7 +272,7 @@ export class BrowserConverter {
     return new Promise((resolve, reject) => {
       // Pre-configure the global Module object before loading the script
       // soffice.js checks for existing Module and merges with it
-      win.Module = {
+      win.Module = withEmscriptenStartupPolicy({
         mainScriptUrlOrBlob: sofficeJs,
         locateFile: (path: string) => locateBrowserRuntimeFile(path, this.options),
         print: this.options.verbose ? console.log : () => { },
@@ -308,7 +284,7 @@ export class BrowserConverter {
         onAbort: (what: string) => {
           reject(new ConversionError(ConversionErrorCode.WASM_NOT_INITIALIZED, `WASM abort: ${what}`));
         },
-      };
+      });
 
       // Load the script
       const script = document.createElement('script');
@@ -432,7 +408,9 @@ export class BrowserConverter {
             filterOptions: options.filterOptions,
             pdf: options.pdf,
           });
-          const nativeResult = this.lokBindings.convertDocument(request);
+          const nativeResult = await runNativeConversionWhenReady(
+            () => this.lokBindings!.convertDocument(request)
+          );
           assertNativeConversionSucceeded(nativeResult);
         } catch (error) {
           if (error instanceof NativeConversionError) {

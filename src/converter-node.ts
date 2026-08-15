@@ -38,10 +38,12 @@ import {
   buildLoadOptions,
 } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
+import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 import {
   NativeConversionError,
   assertNativeConversionSucceeded,
   createNativeConversionRequest,
+  runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
 
 /** Emscripten worker with Node.js-specific methods */
@@ -324,7 +326,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     }
 
     // Build loader config
-    const config = {
+    const config = withEmscriptenStartupPolicy({
       verbose: this.options.verbose,
       print: this.options.verbose ? console.log : () => { },
       printErr: this.options.verbose ? console.error : () => { },
@@ -332,7 +334,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         // Map loader progress to our progress phases
         this.emitProgress('loading', percent, message);
       },
-    };
+    });
 
     return await this.options.wasmLoader.createModule(config);
   }
@@ -662,7 +664,9 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         filterOptions: options.filterOptions,
         pdf: options.pdf,
       });
-      const nativeResult = lokBindings.convertDocument(request);
+      const nativeResult = await runNativeConversionWhenReady(
+        () => lokBindings.convertDocument(request)
+      );
       assertNativeConversionSucceeded(nativeResult);
     } catch (error) {
       if (error instanceof NativeConversionError) {

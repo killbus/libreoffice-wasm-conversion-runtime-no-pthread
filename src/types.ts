@@ -583,6 +583,7 @@ export interface EmscriptenModule {
   FS: EmscriptenFS;
 
   // Lifecycle
+  noInitialRun?: boolean;
   onRuntimeInitialized?: () => void;
   calledRun?: boolean;
 

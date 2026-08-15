@@ -57,6 +57,19 @@ export interface NativeConversionResult {
   message?: string;
 }
 
+export const NATIVE_CONVERSION_RUNTIME_NOT_READY_MESSAGE
+  = 'LibreOffice runtime is not ready for conversion' as const;
+
+const DEFAULT_NATIVE_CONVERSION_READY_TIMEOUT_MS = 5_000;
+const DEFAULT_NATIVE_CONVERSION_READY_RETRY_DELAY_MS = 25;
+
+interface NativeConversionReadyRetryOptions {
+  timeoutMs?: number;
+  retryDelayMs?: number;
+  now?: () => number;
+  sleep?: (delayMs: number) => Promise<void>;
+}
+
 export type NativeConversionErrorKind = 'contract' | 'abi' | 'conversion';
 
 export class NativeConversionError extends Error {
@@ -399,6 +412,67 @@ export function decodeNativeConversionResult(value: unknown): NativeConversionRe
 
 export function isNativeConversionRuntimeReusable(result: NativeConversionResult): boolean {
   return result.cleanup !== 'uncertain';
+}
+
+/**
+ * The native bridge returns this exact pre-document result when LibreOffice's
+ * SolarMutex is temporarily owned elsewhere. Retrying is safe because loading
+ * has not started and cleanup is not required.
+ */
+export function isNativeConversionRuntimeNotReady(
+  result: NativeConversionResult
+): boolean {
+  return !result.ok
+    && result.stage === 'validate'
+    && result.cleanup === 'not-needed'
+    && !result.hiddenLoad
+    && !result.visibleFrameSetupEntered
+    && result.message === NATIVE_CONVERSION_RUNTIME_NOT_READY_MESSAGE;
+}
+
+/**
+ * Run the synchronous native transaction once LibreOffice's UI mutex becomes
+ * available. The delay yields the browser/worker event loop between attempts,
+ * while the deadline prevents a transient busy state from becoming a hang.
+ */
+export async function runNativeConversionWhenReady(
+  convert: () => NativeConversionResult,
+  options: NativeConversionReadyRetryOptions = {}
+): Promise<NativeConversionResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_NATIVE_CONVERSION_READY_TIMEOUT_MS;
+  const retryDelayMs = options.retryDelayMs
+    ?? DEFAULT_NATIVE_CONVERSION_READY_RETRY_DELAY_MS;
+  const now = options.now ?? (() => Date.now());
+  const sleep = options.sleep
+    ?? ((delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    throw new RangeError('Native conversion ready timeout must be a non-negative finite number');
+  }
+  if (!Number.isFinite(retryDelayMs) || retryDelayMs <= 0) {
+    throw new RangeError('Native conversion retry delay must be a positive finite number');
+  }
+
+  const startedAt = now();
+  while (true) {
+    const result = convert();
+    if (!isNativeConversionRuntimeNotReady(result)) {
+      return result;
+    }
+
+    const elapsedMs = Math.max(0, now() - startedAt);
+    const remainingMs = timeoutMs - elapsedMs;
+    if (remainingMs <= 0) {
+      throw new NativeConversionError(
+        'conversion',
+        `LibreOffice runtime did not become ready for conversion within ${timeoutMs} ms`,
+        true,
+        result
+      );
+    }
+
+    await sleep(Math.min(retryDelayMs, remainingMs));
+  }
 }
 
 export function assertNativeConversionSucceeded(

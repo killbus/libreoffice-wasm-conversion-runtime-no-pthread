@@ -253,6 +253,9 @@ function createModule(config = {}) {
           !['onProgress', 'onRuntimeInitialized', 'print', 'printErr', 'verbose', 'wasmBinary'].includes(k)
         )
       ),
+
+      // LOK owns startup; never let Emscripten proxy automatic main() to another pthread.
+      noInitialRun: true,
     };
 
     try {
@@ -281,6 +284,8 @@ function createModuleSync(config = {}) {
     print: config.print || (() => {}),
     printErr: config.printErr || (() => {}),
     ...config,
+    // Apply after caller config so automatic main() cannot be re-enabled.
+    noInitialRun: true,
   };
 
   require('./soffice.cjs');

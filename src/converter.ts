@@ -38,31 +38,17 @@ import {
   buildLoadOptions,
 } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
+import { terminateExportedPThreads } from './emscripten-pthread.js';
+import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 import {
   NativeConversionError,
   assertNativeConversionSucceeded,
   createNativeConversionRequest,
+  runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
 
 // Declare the module factory type
 type ModuleFactory = (config: Partial<EmscriptenModule>) => Promise<EmscriptenModule>;
-
-/** Emscripten worker interface */
-interface EmscriptenWorker {
-  terminate?: () => void;
-}
-
-/** Emscripten PThread interface for pthread cleanup */
-interface EmscriptenPThread {
-  terminateAllThreads?: () => void;
-  runningWorkers?: EmscriptenWorker[];
-  unusedWorkers?: EmscriptenWorker[];
-}
-
-/** Emscripten module with PThread support */
-interface EmscriptenModuleWithPThread extends EmscriptenModule {
-  PThread?: EmscriptenPThread;
-}
 
 
 /**
@@ -101,28 +87,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
   }
 
   private terminatePThreads(module: EmscriptenModule | null): void {
-    if (!module) return;
-
-    try {
-      const mod = module as EmscriptenModuleWithPThread;
-      mod.PThread?.terminateAllThreads?.();
-
-      for (const worker of mod.PThread?.runningWorkers ?? []) {
-        worker?.terminate?.();
-      }
-      if (mod.PThread?.runningWorkers) {
-        mod.PThread.runningWorkers = [];
-      }
-
-      for (const worker of mod.PThread?.unusedWorkers ?? []) {
-        worker?.terminate?.();
-      }
-      if (mod.PThread?.unusedWorkers) {
-        mod.PThread.unusedWorkers = [];
-      }
-    } catch {
-      // A poisoned runtime is discarded even if thread termination reports an error.
-    }
+    terminateExportedPThreads(module);
   }
 
   private quarantineRuntime(): void {
@@ -299,7 +264,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     const wasmPath = this.options.wasmPath || './wasm';
     const moduleUrl = `${wasmPath}/soffice.js`;
 
-    const config: Partial<EmscriptenModule> = {
+    const config = withEmscriptenStartupPolicy({
       locateFile: (path: string) => {
         if (path.endsWith('.wasm')) {
           return `${wasmPath}/soffice.wasm`;
@@ -311,7 +276,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       },
       print: this.options.verbose ? console.log : () => {},
       printErr: this.options.verbose ? console.error : () => {},
-    };
+    });
 
     // Create a script element to load the module
     const script = document.createElement('script');
@@ -334,12 +299,12 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     }
 
     return new Promise((resolve, reject) => {
-      const moduleWithCallback: Partial<EmscriptenModule> = {
+      const moduleWithCallback = withEmscriptenStartupPolicy({
         ...config,
         onRuntimeInitialized: () => {
-          resolve(moduleWithCallback as EmscriptenModule);
+          resolve(moduleWithCallback as unknown as EmscriptenModule);
         },
-      };
+      });
 
       createModule(moduleWithCallback).catch(reject);
     });
@@ -629,7 +594,9 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         filterOptions: options.filterOptions,
         pdf: options.pdf,
       });
-      const nativeResult = lokBindings.convertDocument(request);
+      const nativeResult = await runNativeConversionWhenReady(
+        () => lokBindings.convertDocument(request)
+      );
       assertNativeConversionSucceeded(nativeResult);
     } catch (error) {
       if (error instanceof NativeConversionError) {
