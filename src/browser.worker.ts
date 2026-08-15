@@ -15,6 +15,8 @@ import {
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OperationResult } from './editor/types.js';
 import { LibreOfficeConverter } from './converter.js';
+import { terminateExportedPThreads } from './emscripten-pthread.js';
+import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 
 // ============================================
 // WASM Loading Progress System
@@ -592,7 +594,7 @@ async function handleInit(msg: WorkerMessage) {
       pthreadWorkerMode,
       sofficeWorkerJs,
     });
-    self.Module = {
+    self.Module = withEmscriptenStartupPolicy({
       // Tell pthread workers where to load the main module from
       mainScriptUrlOrBlob: sofficeJs,
       locateFile: (path: string, _scriptDir?: string) => {
@@ -603,7 +605,7 @@ async function handleInit(msg: WorkerMessage) {
       // Always print LibreOffice output to console for debugging
       print: console.log,
       printErr: console.error,
-    };
+    });
 
     // Load the soffice.js script using importScripts
     // This triggers the .wasm download (tracked by XHR interceptor)
@@ -2606,12 +2608,8 @@ function handleDestroy(msg: WorkerMessage) {
     lokBindings = null;
   }
 
-  // Terminate any Emscripten pthread workers
-  if (module && (module as unknown as { PThread?: { terminateAllThreads?: () => void } }).PThread?.terminateAllThreads) {
-    try {
-      (module as unknown as { PThread: { terminateAllThreads: () => void } }).PThread.terminateAllThreads();
-    } catch { /* ignore */ }
-  }
+  // PThread may be a throwing Emscripten accessor when it was not exported.
+  terminateExportedPThreads(module);
 
   module = null;
   initialized = false;

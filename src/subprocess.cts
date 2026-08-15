@@ -98,6 +98,7 @@ async function initialize(payload: InitPayload): Promise<void> {
 
   // Configure module
   (global as any).Module = {
+    noInitialRun: true,
     print: verbose ? console.log : () => {},
     printErr: verbose ? console.error : () => {},
   };
@@ -248,4 +249,3 @@ process.on('message', async (msg: Message) => {
 
 // Signal ready
 process.send?.({ type: 'ready' });
-
