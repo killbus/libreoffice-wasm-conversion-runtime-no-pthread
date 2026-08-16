@@ -22,3 +22,13 @@
 - Release run `31929264247` (`push`) and Release run `31929342327` (`workflow_run`) both completed with their `release` job skipped and no steps executed.
 - No Build WASM run was created after the merge. The npm registry still returned `E404` for `@killbus/libreoffice-converter`, and the GitHub Release list contained no release created after the merge.
 - No publication, semantic-release, native/WASM rebuild, formal Acceptance claim, or Attempt 8 invocation marker occurred.
+
+## Authoritative native-asset correction checkpoint
+
+- Follow-up PR #7 bound the published package paths to the exact four native files from frozen candidate `21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b` and added a fail-closed verifier for paths, sizes, SHA-256 values, WASM parseability, conversion exports, and glue bindings.
+- The reproducible tarball was 80,001,764 bytes with SHA-256 `3b62173f43e4542d764e54d5ea6057354a43b691c1541132ec70421455418a0c`. Two unchanged packs were byte-identical.
+- A clean Node consumer initialized in 3,061 ms, converted DOCX to a valid 42,173-byte PDF in 5,087 ms, reused the module for a second conversion in 850 ms, and cleaned up in 3 ms with `isReady() === false` after release.
+- PDFHow real entry passed in Chrome `145.0.7632.68` with a temporary fresh profile and a reused-profile relaunch. Both sessions were cross-origin isolated, produced a valid 14,670-byte PDF, and created/terminated one worker; totals were 45,568.66 ms fresh and 11,804.29 ms reused.
+- PR #7 merged as `59f042320928cc33ba1d79096fa1297f35bb5959`. Main CI run `31956273828` passed; Release runs `31956273699` (`push`) and `31956323983` (`workflow_run`) skipped without executing release steps. No Build WASM run or npm/GitHub publication occurred.
+- The same legacy converter test remained at 39 passed / 17 failed on both the pre-correction baseline and correction branch. Those failures are retained as a separate viewer/editor ABI follow-up and are not part of this conversion-only checkpoint.
+- This record is non-formal. It does not admit or invoke Attempt 8, create an invocation marker, or claim formal Acceptance.
