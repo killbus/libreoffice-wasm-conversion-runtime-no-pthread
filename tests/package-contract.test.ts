@@ -8,6 +8,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(
   readFileSync(resolve(root, 'package.json'), 'utf8'),
 ) as Record<string, any>;
+const buildPackageSource = readFileSync(
+  resolve(root, 'scripts/build-package.mjs'),
+  'utf8',
+);
 
 describe('published package contract', () => {
   it('uses a fork-specific immutable package identity', () => {
@@ -23,6 +27,12 @@ describe('published package contract', () => {
     expect(packageJson.scripts.build).toBe('node scripts/build-package.mjs');
     expect(packageJson.scripts.prepack).toBe(
       'node scripts/build-package.mjs --silent',
+    );
+    expect(packageJson.scripts['verify:native-package']).toBe(
+      'node scripts/verify-native-package-assets.mjs',
+    );
+    expect(buildPackageSource).toContain(
+      'await verifyNativePackageAssets({ root: process.cwd() });',
     );
     expect(packageJson.scripts.build).not.toContain('build:wasm');
     expect(packageJson.scripts.prepack).not.toContain('build:wasm');
