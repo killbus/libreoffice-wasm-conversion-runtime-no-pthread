@@ -28,8 +28,29 @@
     "src/browser-assets.ts",
     "tests/package-contract.test.ts",
     "README.md",
-    "scripts/build-package.mjs"
+    "scripts/build-package.mjs",
+    "tests/native-package-assets.test.ts",
+    "scripts/verify-native-package-assets.mjs",
+    "wasm/soffice.js",
+    "wasm/soffice.cjs",
+    "wasm/soffice.wasm",
+    "wasm/soffice.data"
   ],
-  "notes": "PR #5 merged as 6b2f2fce5c8b6f9ebd14a79611bd803a69b02282. Main CI 31929264333 passed; Release runs 31929264247 and 31929342327 skipped at job level. No Build WASM run, npm publication, GitHub Release, semantic-release, formal Acceptance, or Attempt 8 marker occurred.",
-  "meta": {}
+  "notes": "PR #5 merged as 6b2f2fce5c8b6f9ebd14a79611bd803a69b02282. Follow-up PR #7 bound the package to the four frozen conversion-candidate native assets and added a fail-closed package verifier; it merged as 59f042320928cc33ba1d79096fa1297f35bb5959. Main CI runs 31929264333 and 31956273828 passed. Release runs 31929264247, 31929342327, 31956273699, and 31956323983 skipped at job level. Clean Node and real-entry PDFHow Chrome DOCX-to-PDF smoke tests passed. No Build WASM run, npm publication, GitHub Release, semantic-release, formal Acceptance, or Attempt 8 invocation marker occurred. The 17 legacy viewer/editor failures reproduce unchanged on the pre-correction baseline and remain a separate ABI follow-up; they are not claimed as resolved by this conversion-only package checkpoint.",
+  "meta": {
+    "correctionPrUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/pull/7",
+    "correctionSourceCommit": "b5275706cc8cd56ff57c1ab6a19fe44801276e60",
+    "correctionMergeCommit": "59f042320928cc33ba1d79096fa1297f35bb5959",
+    "frozenCandidateId": "21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+    "correctionMainCiRun": 31956273828,
+    "correctionPushReleaseRun": 31956273699,
+    "correctionWorkflowRunReleaseRun": 31956323983,
+    "packageTarballSha256": "3b62173f43e4542d764e54d5ea6057354a43b691c1541132ec70421455418a0c",
+    "packageTarballBytes": 80001764,
+    "nativeBuildTriggered": false,
+    "published": false,
+    "formalAcceptance": false,
+    "attempt8InvocationMarker": false,
+    "legacyAbiDisposition": "separate follow-up; 39 passed and 17 failed on both baseline and correction branch"
+  }
 }
