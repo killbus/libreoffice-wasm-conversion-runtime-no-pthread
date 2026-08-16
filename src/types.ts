@@ -233,7 +233,7 @@ export interface LibreOfficeWasmOptions {
    * @example
    * ```typescript
    * // In your code, import the loader statically
-   * import * as wasmLoader from '@matbee/libreoffice-converter/wasm/loader.cjs';
+   * import * as wasmLoader from '@killbus/libreoffice-converter/wasm/loader.cjs';
    *
    * const converter = new LibreOfficeConverter({
    *   wasmPath: './wasm',

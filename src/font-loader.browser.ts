@@ -32,7 +32,7 @@ function getBasename(filepath: string): string {
  *
  * @example
  * ```typescript
- * import { loadFontsFromUrl, WorkerBrowserConverter } from '@matbee/libreoffice-converter/browser';
+ * import { loadFontsFromUrl, WorkerBrowserConverter } from '@killbus/libreoffice-converter/browser';
  *
  * const fonts = await loadFontsFromUrl('/fonts/libreoffice-fonts-cjk.zip');
  * const converter = new WorkerBrowserConverter({ fonts });

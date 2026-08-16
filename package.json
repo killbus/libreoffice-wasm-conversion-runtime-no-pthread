@@ -1,6 +1,6 @@
 {
-  "name": "@matbee/libreoffice-converter",
-  "version": "2.7.2",
+  "name": "@killbus/libreoffice-converter",
+  "version": "2.7.2-pdfhow.1",
   "description": "LibreOffice WASM document conversion toolkit - headless document format conversion",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -33,7 +33,12 @@
       "require": "./wasm/loader.cjs",
       "default": "./wasm/loader.cjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./browser-assets": {
+      "types": "./dist/browser-assets.d.ts",
+      "import": "./dist/browser-assets.js",
+      "default": "./dist/browser-assets.js"
+    }
   },
   "typesVersions": {
     "*": {
@@ -45,6 +50,9 @@
       ],
       "types": [
         "./dist/types-entry.d.ts"
+      ],
+      "browser-assets": [
+        "./dist/browser-assets.d.ts"
       ]
     }
   },
@@ -54,14 +62,11 @@
     "wasm/soffice.cjs",
     "wasm/soffice.js",
     "wasm/soffice.data",
-    "wasm/soffice.data.js.metadata",
     "wasm/soffice.wasm",
-    "wasm/soffice.worker.cjs",
-    "wasm/soffice.worker.js",
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "node scripts/build-package.mjs",
     "build:wasm": "bash build/build-native.sh",
     "dev": "tsx watch src/server.ts",
     "dev:browser": "node dev-server.mjs",
@@ -75,7 +80,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "node scripts/build-package.mjs --silent"
   },
   "keywords": [
     "libreoffice",
@@ -95,12 +101,12 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/matbeedotcom/libreoffice-document-converter.git"
+    "url": "git+https://github.com/killbus/libreoffice-wasm-conversion-runtime.git"
   },
   "bugs": {
-    "url": "https://github.com/matbeedotcom/libreoffice-document-converter/issues"
+    "url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/issues"
   },
-  "homepage": "https://github.com/matbeedotcom/libreoffice-document-converter#readme",
+  "homepage": "https://github.com/killbus/libreoffice-wasm-conversion-runtime#readme",
   "sideEffects": false,
   "engines": {
     "node": ">=18.0.0"
@@ -159,5 +165,8 @@
       ],
       "@semantic-release/github"
     ]
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

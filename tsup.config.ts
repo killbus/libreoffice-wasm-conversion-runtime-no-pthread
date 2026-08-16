@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsup';
 
-export default defineConfig([
+const configs = defineConfig([
   // Node.js build (main entry points)
   {
     entry: {
@@ -60,10 +60,11 @@ export default defineConfig([
       'process.versions': 'undefined',
     },
   },
-  // Types-only entry (ESM only, no .d.cts - safe for Turbopack/bundlers)
+  // Lightweight ESM entries (no .d.cts - safe for Turbopack/bundlers)
   {
     entry: {
       'types-entry': 'src/types-entry.ts',
+      'browser-assets': 'src/browser-assets.ts',
     },
     format: ['esm'],
     dts: true,
@@ -75,6 +76,7 @@ export default defineConfig([
     minify: false,
     outDir: 'dist',
   },
+
   // Browser Web Worker build (classic worker, IIFE format)
   {
     entry: {
@@ -94,3 +96,9 @@ export default defineConfig([
     },
   },
 ]);
+
+const selectedConfigIndex = process.env.TSUP_CONFIG_INDEX;
+
+export default selectedConfigIndex === undefined
+  ? configs
+  : configs[Number.parseInt(selectedConfigIndex, 10)];

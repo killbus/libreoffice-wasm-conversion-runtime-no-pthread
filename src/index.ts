@@ -135,7 +135,7 @@ function validateConversionOptions(options: ConversionOptions): void {
  *
  * @example
  * ```typescript
- * import { createConverter } from '@matbee/libreoffice-converter';
+ * import { createConverter } from '@killbus/libreoffice-converter';
  *
  * const converter = await createConverter({
  *   wasmPath: './wasm',
@@ -163,7 +163,7 @@ export async function createConverter(
  *
  * @example
  * ```typescript
- * import { convertDocument } from '@matbee/libreoffice-converter';
+ * import { convertDocument } from '@killbus/libreoffice-converter';
  *
  * const pdfData = await convertDocument(docxBuffer, {
  *   outputFormat: 'pdf',
@@ -213,7 +213,7 @@ export async function convertDocument(
  *
  * @example
  * ```typescript
- * import { exportAsImage } from '@matbee/libreoffice-converter';
+ * import { exportAsImage } from '@killbus/libreoffice-converter';
  *
  * // Export single page (0-indexed)
  * const [cover] = await exportAsImage(docxBuffer, 0, 'png');
@@ -279,7 +279,7 @@ export function isOutputFormatSupported(format: string): boolean {
  * 
  * @example
  * ```typescript
- * import { isConversionSupported } from '@matbee/libreoffice-converter';
+ * import { isConversionSupported } from '@killbus/libreoffice-converter';
  * 
  * isConversionSupported('docx', 'pdf');  // true
  * isConversionSupported('pdf', 'docx');  // false - PDFs can't be converted to DOCX
@@ -297,7 +297,7 @@ export function isConversionSupported(inputFormat: string, outputFormat: string)
  * 
  * @example
  * ```typescript
- * import { getValidOutputFormatsFor } from '@matbee/libreoffice-converter';
+ * import { getValidOutputFormatsFor } from '@killbus/libreoffice-converter';
  * 
  * getValidOutputFormatsFor('docx');  // ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'png', 'jpg', 'svg']
  * getValidOutputFormatsFor('pdf');   // ['pdf', 'png', 'jpg', 'svg', 'html']

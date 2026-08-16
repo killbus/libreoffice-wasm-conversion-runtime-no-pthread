@@ -73,7 +73,7 @@ export interface ImageEncodeOptions {
  *
  * @example
  * ```typescript
- * import { encodeImage } from '@matbee/libreoffice-converter';
+ * import { encodeImage } from '@killbus/libreoffice-converter';
  *
  * const preview = await converter.renderPage(docBuffer, 'docx', 0, 800);
  * const pngBuffer = await encodeImage(preview.data, preview.width, preview.height, { format: 'png' });
