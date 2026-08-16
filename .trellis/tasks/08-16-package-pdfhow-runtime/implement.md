@@ -17,4 +17,5 @@
 - Tarball inspection found all required root/browser/server/types/browser-assets/loader/package-json targets and all four declared runtime assets. It found no `soffice.worker*` or `soffice.data.js.metadata` path.
 - Isolated consumer: `pnpm install --offline --ignore-scripts` installed the local `file:` tarball with zero downloads after selecting the already-cached `@types/node@20.19.26`. ESM root/browser/types/browser-assets checks passed; CJS root/server/loader/package-json checks passed; strict TypeScript `/types` and `/browser-assets` compilation passed.
 - Regression checks: package contract 5/5 passed, repository typecheck passed, release-runtime guards 67/67 passed, and repository lint completed with zero errors (23 pre-existing warnings).
+- PR #5 was opened Ready; CI run `31928644034` passed install, lint, typecheck, JS build, and test in 1m55s.
 - No publication, semantic-release, native/WASM rebuild, formal Acceptance claim, or Attempt 8 invocation marker occurred.

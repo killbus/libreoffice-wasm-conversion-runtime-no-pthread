@@ -15,8 +15,8 @@
   "branch": "feat/package-pdfhow-runtime",
   "base_branch": "main",
   "worktree_path": "D:\\tmp\\lo-runtime-package-implementation-20260816",
-  "commit": null,
-  "pr_url": null,
+  "commit": "60962f27fa5c846ea6d4f5fc0509b2b91652cdb6",
+  "pr_url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/pull/5",
   "subtasks": [],
   "children": [],
   "parent": "08-10-publish-qualified-libreoffice-runtime-artifact",
@@ -30,6 +30,6 @@
     "README.md",
     "scripts/build-package.mjs"
   ],
-  "notes": "Implementation and non-WASM package/consumer validation complete. Awaiting commit/push. No publication, build:wasm, semantic-release, formal Acceptance, or Attempt 8 marker.",
+  "notes": "Implementation committed and pushed. PR #5 Ready and CI run 31928644034 passed. Awaiting merge. No publication, build:wasm, semantic-release, formal Acceptance, or Attempt 8 marker.",
   "meta": {}
 }
