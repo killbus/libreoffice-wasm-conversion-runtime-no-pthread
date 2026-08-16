@@ -36,7 +36,7 @@ function getBasename(filepath: string): string {
  *
  * @example
  * ```typescript
- * import { loadFontsFromZip, createSubprocessConverter } from '@matbee/libreoffice-converter';
+ * import { loadFontsFromZip, createSubprocessConverter } from '@killbus/libreoffice-converter';
  *
  * const fonts = await loadFontsFromZip('./fonts/libreoffice-fonts-cjk.zip');
  * const converter = await createSubprocessConverter({ fonts });
@@ -85,7 +85,7 @@ export async function loadFontsFromZip(zipPath: string): Promise<FontData[]> {
  *
  * @example
  * ```typescript
- * import { loadFontsFromDirectory, createSubprocessConverter } from '@matbee/libreoffice-converter';
+ * import { loadFontsFromDirectory, createSubprocessConverter } from '@killbus/libreoffice-converter';
  *
  * const fonts = await loadFontsFromDirectory('./my-fonts/');
  * const converter = await createSubprocessConverter({ fonts });
@@ -166,7 +166,7 @@ function collectFontsRecursive(dirPath: string, fonts: FontData[]): void {
  *
  * @example
  * ```typescript
- * import { loadSystemFonts, createSubprocessConverter } from '@matbee/libreoffice-converter';
+ * import { loadSystemFonts, createSubprocessConverter } from '@killbus/libreoffice-converter';
  *
  * const fonts = await loadSystemFonts();
  * const converter = await createSubprocessConverter({ fonts });
@@ -208,7 +208,7 @@ export async function loadSystemFonts(): Promise<FontData[]> {
  *
  * @example
  * ```typescript
- * import { loadFontsFromPackage, createSubprocessConverter } from '@matbee/libreoffice-converter';
+ * import { loadFontsFromPackage, createSubprocessConverter } from '@killbus/libreoffice-converter';
  *
  * // npm install @fontsource/noto-sans-jp
  * const fonts = await loadFontsFromPackage('@fontsource/noto-sans-jp');
@@ -275,7 +275,7 @@ export async function loadFontsFromPackage(
  *
  * @example
  * ```typescript
- * import { loadFontsFromPackages, createSubprocessConverter } from '@matbee/libreoffice-converter';
+ * import { loadFontsFromPackages, createSubprocessConverter } from '@killbus/libreoffice-converter';
  *
  * const fonts = await loadFontsFromPackages([
  *   '@fontsource/noto-sans-jp',

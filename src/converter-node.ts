@@ -320,7 +320,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       throw new ConversionError(
         ConversionErrorCode.WASM_NOT_INITIALIZED,
         'wasmLoader option is required. Import the loader and pass it:\n' +
-        '  import wasmLoader from "@matbee/libreoffice-converter/wasm/loader.cjs";\n' +
+        '  import wasmLoader from "@killbus/libreoffice-converter/wasm/loader.cjs";\n' +
         '  new LibreOfficeConverter({ wasmLoader })'
       );
     }

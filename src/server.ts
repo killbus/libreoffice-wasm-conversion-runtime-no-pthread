@@ -7,7 +7,7 @@
  * @example
  * ```typescript
  * // In Next.js API routes or server components
- * import { WorkerConverter, createWorkerConverter } from '@matbee/libreoffice-converter/server';
+ * import { WorkerConverter, createWorkerConverter } from '@killbus/libreoffice-converter/server';
  *
  * const converter = await createWorkerConverter({ wasmPath: './wasm' });
  * const result = await converter.convert(docxBuffer, { outputFormat: 'pdf' });

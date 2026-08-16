@@ -7,7 +7,7 @@
  * @example
  * ```typescript
  * // In client components (React, Vue, etc.)
- * import type { ConversionOptions, OutputFormat } from '@matbee/libreoffice-converter/types';
+ * import type { ConversionOptions, OutputFormat } from '@killbus/libreoffice-converter/types';
  * ```
  *
  * @packageDocumentation
