@@ -3,7 +3,7 @@
   "name": "package-pdfhow-runtime",
   "title": "Package PDFHow runtime artifact",
   "description": "Establish a fork-scoped immutable package identity, publication-time JS build, clean package manifest, and explicit PDFHow browser-asset contract without publishing or rebuilding WASM.",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": "feature",
   "scope": "package-runtime-contract",
   "package": "@killbus/libreoffice-converter",
@@ -11,7 +11,7 @@
   "creator": "killbus",
   "assignee": "killbus",
   "createdAt": "2026-08-16",
-  "completedAt": null,
+  "completedAt": "2026-08-16",
   "branch": "feat/package-pdfhow-runtime",
   "base_branch": "main",
   "worktree_path": "D:\\tmp\\lo-runtime-package-implementation-20260816",
@@ -30,6 +30,6 @@
     "README.md",
     "scripts/build-package.mjs"
   ],
-  "notes": "Implementation committed and pushed. PR #5 Ready and CI run 31928644034 passed. Awaiting merge. No publication, build:wasm, semantic-release, formal Acceptance, or Attempt 8 marker.",
+  "notes": "PR #5 merged as 6b2f2fce5c8b6f9ebd14a79611bd803a69b02282. Main CI 31929264333 passed; Release runs 31929264247 and 31929342327 skipped at job level. No Build WASM run, npm publication, GitHub Release, semantic-release, formal Acceptance, or Attempt 8 marker occurred.",
   "meta": {}
 }
