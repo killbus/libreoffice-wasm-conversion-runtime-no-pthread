@@ -18,4 +18,7 @@
 - Isolated consumer: `pnpm install --offline --ignore-scripts` installed the local `file:` tarball with zero downloads after selecting the already-cached `@types/node@20.19.26`. ESM root/browser/types/browser-assets checks passed; CJS root/server/loader/package-json checks passed; strict TypeScript `/types` and `/browser-assets` compilation passed.
 - Regression checks: package contract 5/5 passed, repository typecheck passed, release-runtime guards 67/67 passed, and repository lint completed with zero errors (23 pre-existing warnings).
 - PR #5 was opened Ready; CI run `31928644034` passed install, lint, typecheck, JS build, and test in 1m55s.
+- PR #5 merged to `main` as `6b2f2fce5c8b6f9ebd14a79611bd803a69b02282` on 2026-08-16. Main CI run `31929264333` passed every install, lint, typecheck, build, and test step.
+- Release run `31929264247` (`push`) and Release run `31929342327` (`workflow_run`) both completed with their `release` job skipped and no steps executed.
+- No Build WASM run was created after the merge. The npm registry still returned `E404` for `@killbus/libreoffice-converter`, and the GitHub Release list contained no release created after the merge.
 - No publication, semantic-release, native/WASM rebuild, formal Acceptance claim, or Attempt 8 invocation marker occurred.
