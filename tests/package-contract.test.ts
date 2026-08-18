@@ -92,6 +92,8 @@ describe('published package contract', () => {
     expect(buildPackageSource).toContain(
       'await verifyNativePackageAssets({ root: process.cwd() });',
     );
+    expect(buildPackageSource).toContain('buildJsBundles({ silent });');
+    expect(buildPackageSource).not.toContain('skip-native');
     expect(packageJson.scripts.build).not.toContain('build:wasm');
     expect(packageJson.scripts.prepack).not.toContain('build:wasm');
     expect(packageJson.scripts.prepare).toBeUndefined();

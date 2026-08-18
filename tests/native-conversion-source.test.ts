@@ -191,6 +191,12 @@ describe('native conversion source and build gates', () => {
     expect(buildIndex).toBeLessThan(uploadIndex);
   });
 
+  it('does not fetch obsolete LFS bytes before rebuilding native assets', () => {
+    expect(workflow).toContain('lfs: false');
+    expect(workflow).toContain('run: node scripts/build-js-bundles.mjs');
+    expect(workflow).not.toContain('run: npm run build\n');
+  });
+
   it('applies exactly exports, shims, then bridge without later trim atoms', () => {
     const atomNames = [...buildScript.matchAll(
       /apply_conversion_atom\s+\\\s*\r?\n\s*"([^"]+)"/g
