@@ -12,17 +12,17 @@ import {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const candidateSpec = JSON.parse(
   readFileSync(
-    resolve(root, 'scripts/release-runtime/candidate-spec.json'),
+    resolve(root, 'scripts/release-runtime/qualified-candidate-spec.json'),
     'utf8',
   ),
 );
 
 describe('native package asset gate', () => {
-  it('binds the package bytes and glue to the frozen native bridge candidate', async () => {
+  it('binds the package bytes and glue to the qualified successor candidate', async () => {
     const report = await verifyNativePackageAssets({ root, spec: candidateSpec });
 
     expect(report.candidateId).toBe(
-      '21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b',
+      '70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68',
     );
     expect(report.assets.map((asset) => asset.path)).toEqual([
       'wasm/soffice.cjs',

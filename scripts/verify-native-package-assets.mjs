@@ -7,7 +7,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultRoot = resolve(scriptDirectory, '..');
 const defaultSpecPath = resolve(
   defaultRoot,
-  'scripts/release-runtime/candidate-spec.json',
+  'scripts/release-runtime/qualified-candidate-spec.json',
 );
 
 const expectedNativePaths = Object.freeze([

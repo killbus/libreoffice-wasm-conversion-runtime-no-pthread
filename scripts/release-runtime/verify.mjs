@@ -22,7 +22,7 @@ import { validateFrozenSpec } from './lib/schemata.mjs'
 import { serializePrettyJson } from './lib/canonical.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const DEFAULT_SPEC = join(SCRIPT_DIR, 'candidate-spec.json')
+const DEFAULT_SPEC = join(SCRIPT_DIR, 'qualified-candidate-spec.json')
 
 const USAGE = `Usage:
   node scripts/release-runtime/verify.mjs \\
