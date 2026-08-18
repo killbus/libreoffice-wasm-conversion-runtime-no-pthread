@@ -3,7 +3,7 @@
   "name": "pthread-main-script-contract",
   "title": "Pthread main-script artifact contract",
   "description": "Align wrapper defaults, package assets, glue, and release schemas on the main-script pthread profile.",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": "cross-layer",
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "killbus",
   "assignee": "killbus",
   "createdAt": "2026-08-17",
-  "completedAt": null,
+  "completedAt": "2026-08-18",
   "branch": "fix/conversion-contract-integrity",
   "base_branch": "fix/conversion-contract-integrity",
   "worktree_path": null,
-  "commit": null,
+  "commit": "f56317e016ba8d35bc27c06de2e3c5558ef95b8e",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -36,6 +36,6 @@
     "tests/package-contract.test.ts",
     "tests/release-runtime"
   ],
-  "notes": "Wrapper and inventory implementation is complete. Runnable native-package and real-browser conversion gates remain assigned to successor-runtime qualification because checked-in large WASM/data files are Git LFS pointers.",
+  "notes": "Wrapper and inventory implementation plus downloaded-byte native and real-browser successor gates are complete.",
   "meta": {}
 }

@@ -22,5 +22,8 @@ continue to enforce the frozen native package gate.
 - Inputs: `conversion-only`, `clean_build=true`,
   `use_conversion_autogen=false`
 - Checkout without LFS succeeded and npm dependency installation completed.
-- Result: in progress; the qualification task remains open until the workflow
-  conversion gate and artifact upload both succeed.
+- Result: success. The clean native build ran from 14:25:19Z to 17:48:15Z;
+  the freshly-built conversion gate, artifact upload, and job cleanup all
+  completed successfully.
+- Artifact: `soffice-wasm-conversion-only-32146386224.zip`, 78,834,449 bytes,
+  SHA-256 `8b6b6e75caad9a136b00807d2bb807d9dccb87e21354d5f4ffc539a09fbd1e87`.

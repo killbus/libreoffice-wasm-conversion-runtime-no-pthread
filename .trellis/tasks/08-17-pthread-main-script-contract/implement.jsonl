@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The pthread profile crosses public types, resolvers, Worker messages, package inventory, and release schemas."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use one mode resolver and one forbidden-basename predicate instead of divergent defaults and checks."}
-{"file": ".trellis/tasks/08-17-pthread-main-script-contract/research/source-facts.md", "reason": "Ground implementation in the actual glue, frozen inventories, and shallow upstream clone."}
-{"file": ".trellis/tasks/08-17-pthread-main-script-contract/design.md", "reason": "Preserve the fail-closed profile and successor-identity boundaries."}

@@ -30,18 +30,18 @@ describe one product with three invariants:
 
 ## Acceptance Criteria
 
-- [ ] Singular CSV conversion defaults to sheet token `0`, rejects every
+- [x] Singular CSV conversion defaults to sheet token `0`, rejects every
       explicit non-zero/invalid sheet token before native invocation, reads the
       exact requested path, and leaves no suffixed CSV artifacts.
-- [ ] Wrapper default, actual glue, frozen runtime profile, and package inventory
+- [x] Wrapper default, actual glue, frozen runtime profile, and package inventory
       all agree on `main-script`; `soffice.worker.js` is absent and no fallback
       or auto-detection exists.
-- [ ] Published TypeScript/JavaScript entry points expose only capabilities
+- [x] Published TypeScript/JavaScript entry points expose only capabilities
       backed by the conversion-only artifact, or fail explicitly at a documented
       compatibility boundary.
-- [ ] The integrated bytes receive a new candidate identity and pass Node,
+- [x] The integrated bytes receive a new candidate identity and pass Node,
       browser, package-inventory, ABI, lifecycle, and release-verifier gates.
-- [ ] The previous candidate remains immutable and unqualified/qualified state
+- [x] The previous candidate remains immutable and unqualified/qualified state
       is not rewritten.
 
 ## Notes

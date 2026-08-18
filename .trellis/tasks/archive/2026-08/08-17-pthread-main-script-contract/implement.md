@@ -35,11 +35,11 @@
 
 - [x] Run focused resolver/Worker-init tests and TypeScript typecheck.
 - [x] Run package, schema, packager, verifier, and canonical identity suites.
-- [ ] Run the native-package byte gate with materialized successor assets.
+- [x] Run the native-package byte gate with materialized successor assets.
 - [x] Run the broader unit suite, classify artifact-dependent failures, and run
       `git diff --check`.
 - [x] Audit the diff to prove no frozen candidate/native/WASM mutation.
-- [ ] With a runnable successor artifact, run the real-browser default conversion
+- [x] With a runnable successor artifact, run the real-browser default conversion
       gate and prove zero standalone-worker requests.
 - [x] Prove wrapper provenance, runtime profile, identity-bearing manifest
       fields, and declared asset byte/hash changes derive a successor candidate
@@ -81,6 +81,9 @@
 - Hygiene: `git diff --check` passed. Diff from CSV commit `b12289c` is empty for
   `wasm/`, `scripts/release-runtime/candidate-spec.json`,
   `src/browser-assets.ts`, and `package.json`.
+- Successor closure: candidate `70c87563...0c68` passed the exact downloaded-byte
+  native gate and real-Chromium Worker conversion. Chromium observed four
+  pthread Workers loading `soffice.js` and zero `soffice.worker.js` requests.
 
 ## Ground-fact constraints
 

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "kind": "libreoffice-wasm-runtime-successor-qualification-receipt",
+  "decision": "accepted",
+  "candidateQualified": true,
+  "releaseQualified": false,
+  "generatedAt": "2026-08-18T19:14:34Z",
+  "candidateId": "70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68",
+  "qualificationToolingCommit": "37ed9056ead48a821c5635378472bc06f875c4f5",
+  "provenance": {
+    "nativeCommit": "0f583b66570bcecb9562220e0df1d823eb010362",
+    "wrapperCommit": "0f583b66570bcecb9562220e0df1d823eb010362",
+    "githubActionsRunId": "32146386224",
+    "githubActionsRunUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/actions/runs/32146386224",
+    "buildMode": "conversion-only",
+    "cleanBuild": true,
+    "useConversionAutogen": false
+  },
+  "nativeArchive": {
+    "name": "soffice-wasm-conversion-only-32146386224.zip",
+    "bytes": 78834449,
+    "sha256": "8b6b6e75caad9a136b00807d2bb807d9dccb87e21354d5f4ffc539a09fbd1e87"
+  },
+  "payload": {
+    "name": "libreoffice-wasm-runtime-70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68.zip",
+    "bytes": 248884128,
+    "sha256": "457c9e32cd2df330abcaf78f4698011087c2f167362e8541519bb84031fc9534",
+    "candidateManifestSha256": "cdb6fe9727ec1b46626b675bb1b904ed3219f5b9ec07615c956cf4a578fe85e2",
+    "assetSumsSha256": "c7e94a06abda10cb87943c82ea45e213b33ab32514df5d78803b413a95aba13a",
+    "deterministicDoubleAssembly": true,
+    "independentVerification": "passed"
+  },
+  "oldCandidate": {
+    "candidateId": "21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b",
+    "unchanged": true,
+    "oldSpecRejectsSuccessorBytes": true,
+    "rejectionEvidenceSha256": "6b8b1f76ed59428b2b095109ba5333498b9401e753ad49c3400f1d7437ae4fb4"
+  },
+  "gates": [
+    {
+      "name": "workflow-build-and-conversion",
+      "status": "passed",
+      "details": "Build, freshly-built conversion gate, and artifact upload all completed successfully."
+    },
+    {
+      "name": "native-package-and-exact-abi",
+      "status": "passed",
+      "evidenceSha256": "e6953c12f43db87c11274f1809a360e2ff8e1d4c60e09a58b19cf964fe7006bc",
+      "details": "Four native assets matched; WASM parsed; the exact 14-symbol lok_* allowlist and both glue bindings matched."
+    },
+    {
+      "name": "downloaded-byte-node-smoke",
+      "status": "passed",
+      "evidenceSha256": "fe081f9803a03cc17361722ce80806fd39b13b2ef6b499174aa4f47de9d6e381",
+      "details": "Frozen four-method facade, DOCX-to-PDF, reuse, safe rejection, recovery, exact ABI, and clean destroy passed."
+    },
+    {
+      "name": "sequential-five-format-matrix",
+      "status": "passed-after-checker-remediation",
+      "failedAttemptEvidenceSha256": "fc36723b48eba33e3b3524f28307cb38261093d55b3d82a23b37b7fb4bd2ba6e",
+      "diagnosticEvidenceSha256": "4c2d92bf6d6a8a6fc2120984dcb24fdcf7d5c63fcc21e572ca6fb0228ccdf1d6",
+      "remediationCommit": "9d76c2b3494b488c50fb47f595df74bc6d122d1a",
+      "passingAttemptEvidenceSha256": "96852f4bb5ba557b7502d49c5fc4dddc1e7ab1e89d597fc534fd6fe674481628",
+      "details": "Attempt 1 disclosed a checker-only SVG DOCTYPE rejection. Diagnostic proved a valid image/svg+xml document. Attempt 2 passed DOCX-PDF, XLSX-CSV, PPTX-PDF, PDF-PNG, and PPTX-SVG in one converter with clean destroy."
+    },
+    {
+      "name": "real-browser-worker-main-script",
+      "status": "passed-after-infrastructure-remediation",
+      "failedAttemptEvidenceSha256": "a133d894c8b68fd61141b920a6cedda5e38382a998088caa1a3c5f4959e379e3",
+      "passingAttemptEvidenceSha256": "74f0885ff47ab6c3628e5f7a65a986f7535919058bd202c3d25a0e83594a3b03",
+      "details": "Attempt 1 failed before browser launch because the Chrome singleton socket path was too long. Attempt 2 passed COOP/COEP, SharedArrayBuffer, frozen facade, Worker conversion, four soffice.js pthread Workers, PDF output, zero soffice.worker.js requests, and clean destroy."
+    },
+    {
+      "name": "source-contract-regression",
+      "status": "passed",
+      "details": "28 focused package, public-surface, pthread-profile, and candidate-freezing tests passed with one Vitest worker; TypeScript typecheck passed."
+    }
+  ],
+  "resourcePolicy": {
+    "wasmInstancesAtOnce": 1,
+    "conversionTestsSequential": true,
+    "evidenceRoot": "./tmp/lo-successor-qpa5W1"
+  },
+  "publication": {
+    "authorized": false,
+    "npmPublished": false,
+    "githubReleaseCreatedOrPromoted": false,
+    "pagesDeployed": false,
+    "mergedToMain": false
+  }
+}

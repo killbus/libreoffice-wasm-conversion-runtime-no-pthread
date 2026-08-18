@@ -1,4 +1,0 @@
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The public surface crosses package entries, declarations, runtime objects, Worker transport, docs, and the native ABI."}
-{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"One conversion facade and one export allowlist must own all entry-point projections."}
-{"file":".trellis/tasks/08-17-conversion-only-public-surface/research/export-inventory.md","reason":"Ground deletions in the materialized 52-export conversion artifact and upstream comparison."}
-{"file":".trellis/tasks/08-17-conversion-only-public-surface/design.md","reason":"Preserve the exact conversion-only facade, entry-point, format, and rollback boundaries."}
