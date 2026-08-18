@@ -90,6 +90,7 @@ import {
   FORMAT_FILTERS,
   getConversionErrorMessage,
   isConversionValid,
+  resolveSingleResultFilterOptions,
 } from './types.js';
 import type {
   ConversionOptions,
@@ -111,6 +112,8 @@ const isNode = typeof process !== 'undefined' &&
 
 function validateConversionOptions(options: ConversionOptions): void {
   const outputFormat = options.outputFormat;
+
+  resolveSingleResultFilterOptions(outputFormat, options.filterOptions);
 
   if (!FORMAT_FILTERS[outputFormat]) {
     throw new ConversionError(

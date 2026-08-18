@@ -47,6 +47,7 @@ export type { ImageEncodeOptions } from './image-utils.js';
 
 import { LibreOfficeConverter } from './converter-node.js';
 import { createSubprocessConverter } from './subprocess.worker-converter.js';
+import { resolveSingleResultFilterOptions } from './types.js';
 import type { ConversionOptions, ConversionResult, LibreOfficeWasmOptions } from './types.js';
 
 /**
@@ -69,6 +70,7 @@ export async function convertDocument(
   options: ConversionOptions,
   converterOptions?: LibreOfficeWasmOptions
 ): Promise<ConversionResult> {
+  resolveSingleResultFilterOptions(options.outputFormat, options.filterOptions);
   const converter = await createSubprocessConverter(converterOptions);
   try {
     return await converter.convert(input, options);

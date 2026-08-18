@@ -36,6 +36,7 @@ import {
   InputFormat,
   getOutputFormatsForDocType,
   buildLoadOptions,
+  resolveSingleResultFilterOptions,
 } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
 import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
@@ -45,6 +46,13 @@ import {
   createNativeConversionRequest,
   runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
+import {
+  ConversionCleanupUncertaintyError,
+  attachCleanupUncertainty,
+  beginCsvConversionTransaction,
+  finishCsvConversionTransaction,
+  readExactConvertedOutput,
+} from './conversion-output.js';
 
 /** Emscripten worker with Node.js-specific methods */
 interface EmscriptenWorker {
@@ -530,6 +538,11 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     // Check if we need to reinitialize due to previous corruption
     if (this.corrupted) {
       await this.reinitialize();
@@ -572,6 +585,23 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
 
     const inputPath = `/tmp/input/doc.${inputExt}`;
     const outputPath = `/tmp/output/doc.${outputExt}`;
+    let csvTransaction;
+    try {
+      csvTransaction = beginCsvConversionTransaction(
+        this.module.FS,
+        inputPath,
+        outputPath,
+        outputExt
+      );
+    } catch (error) {
+      this.quarantineRuntime();
+      throw error;
+    }
+    const effectiveOptions = effectiveFilterOptions === options.filterOptions
+      ? options
+      : { ...options, filterOptions: effectiveFilterOptions };
+    let primaryError: unknown;
+    let conversionFailed = false;
 
     try {
       this.emitProgress('converting', 10, 'Writing input document...');
@@ -586,7 +616,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         inputPath,
         outputPath,
         inputExt,
-        options
+        effectiveOptions
       );
 
       this.emitProgress('complete', 100, 'Conversion complete');
@@ -601,6 +631,8 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         duration: Date.now() - startTime,
       };
     } catch (error) {
+      conversionFailed = true;
+      primaryError = error;
       // Check if this error indicates corruption
       if (error instanceof Error && this.isCorruptionError(error)) {
         this.corrupted = true;
@@ -610,16 +642,33 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       }
       throw error;
     } finally {
-      // Cleanup temporary files
-      try {
-        this.module?.FS.unlink(inputPath);
-      } catch {
-        // Ignore
-      }
-      try {
-        this.module?.FS.unlink(outputPath);
-      } catch {
-        // Ignore
+      if (csvTransaction) {
+        try {
+          finishCsvConversionTransaction(csvTransaction);
+        } catch (error) {
+          const cleanupError = error instanceof ConversionCleanupUncertaintyError
+            ? error
+            : new ConversionCleanupUncertaintyError([String(error)]);
+          this.quarantineRuntime();
+          if (conversionFailed) {
+            const annotatedError = attachCleanupUncertainty(primaryError, cleanupError);
+            if (!(primaryError instanceof Error)) throw annotatedError;
+          } else {
+            throw cleanupError;
+          }
+        }
+      } else {
+        // Legacy non-CSV cleanup remains best-effort.
+        try {
+          this.module?.FS.unlink(inputPath);
+        } catch {
+          // Ignore
+        }
+        try {
+          this.module?.FS.unlink(outputPath);
+        } catch {
+          // Ignore
+        }
       }
     }
   }
@@ -685,24 +734,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     }
 
     this.emitProgress('converting', 90, 'Reading output...');
-    try {
-      const outputData = module.FS.readFile(outputPath) as Uint8Array;
-      if (outputData.length === 0) {
-        throw new ConversionError(
-          ConversionErrorCode.CONVERSION_FAILED,
-          'Conversion produced empty output'
-        );
-      }
-      return outputData;
-    } catch (error) {
-      if (error instanceof ConversionError) {
-        throw error;
-      }
-      throw new ConversionError(
-        ConversionErrorCode.CONVERSION_FAILED,
-        `Failed to read converted file: ${String(error)}`
-      );
-    }
+    return readExactConvertedOutput(module.FS, outputPath);
   }
 
   /**

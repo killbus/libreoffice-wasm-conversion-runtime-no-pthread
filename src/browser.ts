@@ -75,6 +75,7 @@ import {
   FORMAT_MIME_TYPES,
   FORMAT_FILTER_OPTIONS,
   buildPdfFilterOptions,
+  resolveSingleResultFilterOptions,
   OUTPUT_FORMAT_TO_LOK,
   BrowserConverterOptions,
   WorkerBrowserConverterOptions,
@@ -107,6 +108,13 @@ import {
   createNativeConversionRequest,
   runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
+import {
+  ConversionCleanupUncertaintyError,
+  attachCleanupUncertainty,
+  beginCsvConversionTransaction,
+  finishCsvConversionTransaction,
+  readExactConvertedOutput,
+} from './conversion-output.js';
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OpenDocumentOptions } from './editor/types.js';
 import { terminateExportedPThreads } from './emscripten-pthread.js';
@@ -346,6 +354,11 @@ export class BrowserConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if (this.corrupted) {
       throw new ConversionError(
         ConversionErrorCode.WASM_NOT_INITIALIZED,
@@ -372,8 +385,22 @@ export class BrowserConverter {
 
     const inPath = `/tmp/input/doc.${ext}`;
     const outPath = `/tmp/output/doc.${outputExt}`;
+    let csvTransaction;
+    try {
+      csvTransaction = beginCsvConversionTransaction(
+        this.module.FS,
+        inPath,
+        outPath,
+        outputExt
+      );
+    } catch (error) {
+      this.quarantineRuntime();
+      throw error;
+    }
     const isImageFormat = ['png', 'jpg', 'svg'].includes(outputExt);
     let docPtr = 0;
+    let primaryError: unknown;
+    let conversionFailed = false;
 
     try {
       this.module.FS.writeFile(inPath, inputData);
@@ -393,7 +420,7 @@ export class BrowserConverter {
         }
 
         const lokFormat = OUTPUT_FORMAT_TO_LOK[outputExt];
-        const filterOptions = options.filterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
+        const filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
         this.emitProgress('converting', 70, 'Saving...');
         this.lokBindings.documentSaveAs(docPtr, outPath, lokFormat, filterOptions);
       } else {
@@ -405,7 +432,7 @@ export class BrowserConverter {
             inputFormat: ext,
             outputFormat: outputExt,
             password: options.password,
-            filterOptions: options.filterOptions,
+            filterOptions: effectiveFilterOptions,
             pdf: options.pdf,
           });
           const nativeResult = await runNativeConversionWhenReady(
@@ -430,10 +457,7 @@ export class BrowserConverter {
       }
 
       this.emitProgress('converting', 90, 'Reading output...');
-      const sharedResult = this.module.FS.readFile(outPath) as Uint8Array;
-      if (sharedResult.length === 0) {
-        throw new ConversionError(ConversionErrorCode.CONVERSION_FAILED, 'Empty output');
-      }
+      const sharedResult = readExactConvertedOutput(this.module.FS, outPath);
 
       const result = new Uint8Array(sharedResult.length);
       result.set(sharedResult);
@@ -446,14 +470,35 @@ export class BrowserConverter {
         filename: `${baseName}.${outputExt}`,
         duration: Date.now() - startTime,
       };
+    } catch (error) {
+      conversionFailed = true;
+      primaryError = error;
+      throw error;
     } finally {
       if (docPtr !== 0 && this.lokBindings) {
         try {
           this.lokBindings.documentDestroy(docPtr);
         } catch { /* ignore */ }
       }
-      try { this.module?.FS.unlink(inPath); } catch { /* ignore */ }
-      try { this.module?.FS.unlink(outPath); } catch { /* ignore */ }
+      if (csvTransaction) {
+        try {
+          finishCsvConversionTransaction(csvTransaction);
+        } catch (error) {
+          const cleanupError = error instanceof ConversionCleanupUncertaintyError
+            ? error
+            : new ConversionCleanupUncertaintyError([String(error)]);
+          this.quarantineRuntime();
+          if (conversionFailed) {
+            const annotatedError = attachCleanupUncertainty(primaryError, cleanupError);
+            if (!(primaryError instanceof Error)) throw annotatedError;
+          } else {
+            throw cleanupError;
+          }
+        }
+      } else {
+        try { this.module?.FS.unlink(inPath); } catch { /* ignore */ }
+        try { this.module?.FS.unlink(outPath); } catch { /* ignore */ }
+      }
     }
   }
 
@@ -857,6 +902,11 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if ((!this.initialized || !this.worker) && this.restartOnNextConvert) {
       await this.initialize();
     }
@@ -878,7 +928,7 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
       throw new ConversionError(ConversionErrorCode.UNSUPPORTED_FORMAT, `Unsupported: ${outputExt}`);
     }
 
-    let filterOptions = options.filterOptions;
+    let filterOptions = effectiveFilterOptions;
     if (filterOptions === undefined && outputExt === 'pdf' && options.pdf) {
       filterOptions = buildPdfFilterOptions(options.pdf);
     }
@@ -1757,6 +1807,7 @@ export async function quickConvert(
   outputFormat: OutputFormat,
   options: BrowserWasmPaths & { download?: boolean }
 ): Promise<ConversionResult> {
+  resolveSingleResultFilterOptions(outputFormat);
   const converter = new BrowserConverter({
     sofficeJs: options.sofficeJs,
     sofficeWasm: options.sofficeWasm,

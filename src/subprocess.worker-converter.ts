@@ -22,6 +22,7 @@ import {
   FullQualityRenderOptions,
   FORMAT_FILTER_OPTIONS,
   buildPdfFilterOptions,
+  resolveSingleResultFilterOptions,
   ILibreOfficeConverter,
   InputFormatOptions,
   LibreOfficeWasmOptions,
@@ -303,6 +304,11 @@ export class SubprocessConverter implements ILibreOfficeConverter {
   }
 
   async convert(input: Uint8Array | ArrayBuffer | Buffer, options: ConversionOptions, filename = 'document'): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if ((!this.initialized || !this.child) && this.restartOnNextConvert) {
       await this.initialize();
     }
@@ -315,7 +321,7 @@ export class SubprocessConverter implements ILibreOfficeConverter {
     if (data.length === 0) throw new ConversionError(ConversionErrorCode.INVALID_INPUT, 'Empty');
 
     const inputFormat = options.inputFormat || (filename.includes('.') ? filename.slice(filename.lastIndexOf('.') + 1).toLowerCase() : 'docx');
-    let filterOptions = options.filterOptions ?? FORMAT_FILTER_OPTIONS[options.outputFormat] ?? '';
+    let filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[options.outputFormat] ?? '';
     if (!options.filterOptions && options.outputFormat === 'pdf' && options.pdf) {
       filterOptions = buildPdfFilterOptions(options.pdf) || filterOptions;
     }

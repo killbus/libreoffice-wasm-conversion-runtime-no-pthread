@@ -292,6 +292,62 @@ describe('shared Node worker protocol', () => {
 });
 
 describe('Node worker owners', () => {
+  it('materializes the CSV zero default in Worker and subprocess owner messages', async () => {
+    const expected = '44,34,76,1,,0,false,true,false,false,false,0';
+    const workerConverter = new WorkerConverter({ workerPath: './fake-node-worker.cjs' });
+    await workerConverter.initialize();
+    await workerConverter.convert(
+      new Uint8Array([1]),
+      { inputFormat: 'xlsx', outputFormat: 'csv' },
+      'report.xlsx'
+    );
+    expect(findConvertMessage(workerHarness.workerInstances[0]!.messages).payload)
+      .toMatchObject({ filterOptions: expected });
+    await workerConverter.destroy();
+
+    const subprocessConverter = new SubprocessConverter({
+      maxInitRetries: 1,
+      maxConversionRetries: 1,
+    });
+    await subprocessConverter.initialize();
+    await subprocessConverter.convert(
+      new Uint8Array([1]),
+      { inputFormat: 'xlsx', outputFormat: 'csv' },
+      'report.xlsx'
+    );
+    expect(findConvertMessage(workerHarness.childInstances[0]!.messages).payload)
+      .toMatchObject({ filterOptions: expected });
+    await subprocessConverter.destroy();
+  });
+
+  it('rejects non-singular CSV options before either owner posts a conversion', async () => {
+    const options = {
+      inputFormat: 'xlsx' as const,
+      outputFormat: 'csv' as const,
+      filterOptions: '44,34,76,1,,0,false,true,false,false,false,-1',
+    };
+    const workerConverter = new WorkerConverter({ workerPath: './fake-node-worker.cjs' });
+    await workerConverter.initialize();
+    await expect(workerConverter.convert(new Uint8Array([1]), options, 'report.xlsx'))
+      .rejects.toMatchObject({ code: ConversionErrorCode.INVALID_INPUT });
+    expect(workerHarness.workerInstances[0]!.messages.filter(
+      (message) => message.type === 'convert'
+    )).toHaveLength(0);
+    await workerConverter.destroy();
+
+    const subprocessConverter = new SubprocessConverter({
+      maxInitRetries: 1,
+      maxConversionRetries: 1,
+    });
+    await subprocessConverter.initialize();
+    await expect(subprocessConverter.convert(new Uint8Array([1]), options, 'report.xlsx'))
+      .rejects.toMatchObject({ code: ConversionErrorCode.INVALID_INPUT });
+    expect(workerHarness.childInstances[0]!.messages.filter(
+      (message) => message.type === 'convert'
+    )).toHaveLength(0);
+    await subprocessConverter.destroy();
+  });
+
   it('terminates a quarantined Worker and converts next time with a fresh Worker', async () => {
     workerHarness.workerOutcomes.push('quarantine', 'success');
     const converter = new WorkerConverter({ workerPath: './fake-node-worker.cjs' });

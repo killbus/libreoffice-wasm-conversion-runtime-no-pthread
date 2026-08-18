@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertDocument, ConversionErrorCode } from '../src/index.js';
+import { convertDocument as convertServerDocument } from '../src/server.js';
 
 const subprocessMocks = vi.hoisted(() => ({
   createSubprocessConverter: vi.fn(async () => {
@@ -41,6 +42,25 @@ describe('convertDocument request validation', () => {
     ).rejects.toMatchObject({
       name: 'ConversionError',
       code: ConversionErrorCode.UNSUPPORTED_FORMAT,
+    });
+
+    expect(subprocessMocks.createSubprocessConverter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['root', convertDocument],
+    ['server', convertServerDocument],
+  ])('rejects a non-singular CSV sheet option in the %s entry before initializing WASM', async (_entry, convert) => {
+    await expect(
+      convert(new Uint8Array([1]), {
+        inputFormat: 'xlsx',
+        outputFormat: 'csv',
+        filterOptions: '44,34,76,1,,0,false,true,false,false,false,-1',
+      })
+    ).rejects.toMatchObject({
+      name: 'ConversionError',
+      code: ConversionErrorCode.INVALID_INPUT,
+      message: expect.stringContaining('token 11'),
     });
 
     expect(subprocessMocks.createSubprocessConverter).not.toHaveBeenCalled();

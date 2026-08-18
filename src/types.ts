@@ -835,10 +835,39 @@ export const FORMAT_FILTER_OPTIONS: Partial<Record<OutputFormat, string>> = {
   // - Quality
   pdf: '',
   // CSV can specify separator, encoding, etc.
-  csv: '44,34,76,1,,0,false,true,false,false,false,-1',
+  csv: '44,34,76,1,,0,false,true,false,false,false,0',
   // Text encoding
   txt: 'UTF8',
 };
+
+const CSV_EXPORT_SHEET_TOKEN_INDEX = 11;
+
+/**
+ * Resolve filter options for a singular conversion result.
+ *
+ * LibreOffice writes CSV exports to suffixed sibling files whenever token 11
+ * is non-zero. Singular conversion APIs therefore accept only an absent,
+ * empty, missing, or canonical `0` sheet token and preserve every other token
+ * exactly as supplied by the caller.
+ */
+export function resolveSingleResultFilterOptions(
+  outputFormat: OutputFormat | string,
+  filterOptions?: FilterOptions
+): FilterOptions | undefined {
+  if (outputFormat.toLowerCase() !== 'csv') return filterOptions;
+
+  const effectiveOptions = filterOptions ?? FORMAT_FILTER_OPTIONS.csv ?? '';
+  const sheetToken = effectiveOptions.split(',')[CSV_EXPORT_SHEET_TOKEN_INDEX];
+
+  if (sheetToken === undefined || sheetToken === '' || sheetToken === '0') {
+    return effectiveOptions;
+  }
+
+  throw new ConversionError(
+    ConversionErrorCode.INVALID_INPUT,
+    `CSV single-result conversion requires filter option token 11 to be empty or 0; received ${JSON.stringify(sheetToken)}`
+  );
+}
 
 /**
  * CSV Import filter options for loading CSV files as spreadsheets.
