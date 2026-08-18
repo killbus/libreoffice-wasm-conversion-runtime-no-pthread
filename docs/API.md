@@ -356,7 +356,7 @@ const paths = createWasmPaths();
 //   sofficeJs: '/wasm/soffice.js',
 //   sofficeWasm: '/wasm/soffice.wasm',
 //   sofficeData: '/wasm/soffice.data',
-//   sofficeWorkerJs: '/wasm/soffice.worker.js',
+//   pthreadWorkerMode: 'main-script',
 // }
 
 // Or use your own CDN
@@ -367,10 +367,15 @@ const converter = new WorkerBrowserConverter({
   sofficeJs: 'https://cdn.example.com/wasm/soffice.js',
   sofficeWasm: 'https://cdn.example.com/wasm/soffice.wasm',
   sofficeData: 'https://cdn.example.com/wasm/soffice.data',
-  sofficeWorkerJs: 'https://cdn.example.com/wasm/soffice.worker.js',
+  pthreadWorkerMode: 'main-script',
   browserWorkerJs: '/workers/browser.worker.js',
 });
 ```
+
+The current browser artifact starts pthreads from `soffice.js` through
+`mainScriptUrlOrBlob`. Do not deploy or configure a standalone
+`soffice.worker.js`. External-worker mode is valid only for a separately built
+and frozen artifact and must be selected explicitly with its worker URL.
 
 ### Required HTTP Headers
 
@@ -813,7 +818,6 @@ Ensure the `wasm/` directory contains all required files:
 - `soffice.wasm`
 - `soffice.cjs`
 - `soffice.data`
-- `soffice.worker.cjs`
 - `loader.cjs`
 
 ### "SharedArrayBuffer is not defined" (Browser)
@@ -966,7 +970,6 @@ BUILD_JOBS=32 ./build/build-wasm.sh
 | `soffice.wasm` | 112 MB | 24.8 MB | Main WebAssembly binary |
 | `soffice.data` | 80 MB | 15.2 MB | Filesystem image (fonts, configs) |
 | `soffice.cjs` | 230 KB | - | JavaScript loader |
-| `soffice.worker.cjs` | 4 KB | - | Web Worker script |
 | `loader.cjs` | 8 KB | - | Node.js module loader |
 | **Total** | **192 MB** | **40 MB** | With Brotli compression |
 

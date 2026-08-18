@@ -18,7 +18,7 @@ import {
   RELEASE_MANIFEST_KIND,
   ACCEPTANCE_RECEIPT_KIND,
   STAGING_REPORT_KIND,
-  FORBIDDEN_WORKER_FILE,
+  isForbiddenWorkerPath,
 } from './constants.mjs'
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/
@@ -122,7 +122,7 @@ export function normalizeRuntime(runtime) {
   }
   const externalWorker = runtime?.externalWorker ?? null
   if (mode === 'external') {
-    if (typeof externalWorker !== 'string' || externalWorker.length === 0) {
+    if (typeof externalWorker !== 'string' || externalWorker.trim().length === 0) {
       throw new SchemaError(
         'external pthread mode requires a non-empty externalWorker path'
       )
@@ -217,7 +217,7 @@ export function validateFrozenSpec(value) {
     seenPaths.add(normalized.path)
     assets.push(normalized)
   }
-  if (assets.some((asset) => asset.path === FORBIDDEN_WORKER_FILE)) {
+  if (assets.some((asset) => isForbiddenWorkerPath(asset.path))) {
     throw new SchemaError('frozen spec must not contain soffice.worker.js')
   }
 
@@ -289,7 +289,7 @@ export function validateCandidateManifest(value) {
   const assets = value.assets.map((asset) =>
     expectAsset(asset, { requireSource: false })
   )
-  if (assets.some((asset) => asset.path === FORBIDDEN_WORKER_FILE)) {
+  if (assets.some((asset) => isForbiddenWorkerPath(asset.path))) {
     throw new SchemaError(
       'candidate manifest must not contain soffice.worker.js'
     )

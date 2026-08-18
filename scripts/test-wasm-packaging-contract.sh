@@ -32,6 +32,12 @@ package_once() {
   if [ ! -f "${ARTIFACT_DIR}/soffice.data" ]; then
     echo "FAIL: no data"; return 1
   fi
+  if ! grep -qF 'mainScriptUrlOrBlob' "${ARTIFACT_DIR}/soffice.js"; then
+    echo "reject-non-main-script-glue"; return 3
+  fi
+  if grep -qF 'soffice.worker.js' "${ARTIFACT_DIR}/soffice.js"; then
+    echo "reject-external-worker-glue"; return 3
+  fi
 
   rm -f "${OUTPUT_DIR}/soffice.wasm" "${OUTPUT_DIR}/soffice.cjs" "${OUTPUT_DIR}/soffice.js" \
         "${OUTPUT_DIR}/soffice.data" "${OUTPUT_DIR}/soffice.worker.cjs" "${OUTPUT_DIR}/soffice.worker.js"
@@ -59,7 +65,7 @@ package_once() {
   return 0
 }
 
-CLASSIC='function GROWABLE_HEAP_I8(){return 1}'
+CLASSIC='var pthreadMainJs=Module["mainScriptUrlOrBlob"];function GROWABLE_HEAP_I8(){return 1}'
 
 echo "=== Test 1: only soffice.mjs → must fail (code 2) ==="
 A1="$WORK/art1"; O1="$WORK/out1"
@@ -83,6 +89,7 @@ mkdir -p "$A2" "$O2"
 echo fakewasm > "$A2/soffice.wasm"
 echo fakedata > "$A2/soffice.data"
 printf '%s\n' "$CLASSIC" > "$A2/soffice.js"
+printf '%s\n' 'sidecar-must-not-be-inferred' > "$A2/soffice.worker.js"
 package_once "$A2" "$O2"
 n=$(grep -cF "$PATCH_GLOBAL_MODULE" "$O2/soffice.cjs")
 body=$(grep -vF "$PATCH_GLOBAL_MODULE" "$O2/soffice.cjs" | tr -d '\r')
@@ -93,6 +100,9 @@ if [ "$n" != "1" ] || [ "$body" != "$CLASSIC" ]; then
 fi
 if [ ! -f "$O2/soffice.js" ]; then
   echo "FAIL: missing browser js"; exit 1
+fi
+if [ -e "$O2/soffice.worker.js" ] || [ -e "$O2/soffice.worker.cjs" ]; then
+  echo "FAIL: standalone worker was inferred from sidecar presence"; exit 1
 fi
 echo "PASS: classic js → cjs with exactly one bootstrap line"
 
@@ -121,7 +131,23 @@ if grep -q STALE_LFS_BODY "$O3/soffice.cjs"; then
 fi
 echo "PASS: dirty input collapsed; stale output cleared"
 
-echo "=== Test 4: build-wasm.sh syntax ==="
+echo "=== Test 4: external-worker glue → must fail (code 3) ==="
+A4="$WORK/art4"; O4="$WORK/out4"
+mkdir -p "$A4" "$O4"
+echo fakewasm > "$A4/soffice.wasm"
+echo fakedata > "$A4/soffice.data"
+printf '%s\n' 'var pthreadMainJs=Module["mainScriptUrlOrBlob"];new Worker("soffice.worker.js")' > "$A4/soffice.js"
+set +e
+package_once "$A4" "$O4"
+rc=$?
+set -e
+if [ "$rc" != "3" ]; then
+  echo "FAIL: expected exit 3 for external-worker glue, got $rc"
+  exit 1
+fi
+echo "PASS: external-worker glue rejected"
+
+echo "=== Test 5: build-wasm.sh syntax ==="
 bash -n "$BUILD_WASM"
 echo "PASS: bash -n build-wasm.sh"
 

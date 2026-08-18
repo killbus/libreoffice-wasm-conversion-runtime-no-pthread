@@ -24,10 +24,11 @@ function requireNonEmptyPath(name: string, value: unknown): string {
 }
 
 function resolvePthreadWorkerPaths(
-  options: BrowserWasmPathInput,
-  defaultExternalWorkerJs?: string
+  options: BrowserWasmPathInput
 ): ResolvedPthreadWorkerPaths {
-  const mode = options.pthreadWorkerMode ?? 'external';
+  const mode = options.pthreadWorkerMode === undefined
+    ? 'main-script'
+    : options.pthreadWorkerMode;
   if (mode !== 'external' && mode !== 'main-script') {
     throw new Error(
       `${ARTIFACT_CONTRACT_PREFIX}: unsupported pthreadWorkerMode ${JSON.stringify(mode)}`
@@ -37,7 +38,7 @@ function resolvePthreadWorkerPaths(
   if (mode === 'main-script') {
     if (options.sofficeWorkerJs !== undefined) {
       throw new Error(
-        `${ARTIFACT_CONTRACT_PREFIX}: sofficeWorkerJs must be omitted when pthreadWorkerMode is "main-script"`
+        `${ARTIFACT_CONTRACT_PREFIX}: sofficeWorkerJs must be omitted unless pthreadWorkerMode is explicitly "external"`
       );
     }
     return { pthreadWorkerMode: 'main-script' };
@@ -47,12 +48,12 @@ function resolvePthreadWorkerPaths(
     pthreadWorkerMode: 'external',
     sofficeWorkerJs: requireNonEmptyPath(
       'sofficeWorkerJs',
-      options.sofficeWorkerJs ?? defaultExternalWorkerJs
+      options.sofficeWorkerJs
     ),
   };
 }
 
-/** Apply legacy browser defaults, then validate the selected artifact contract. */
+/** Apply main-script browser defaults, then validate the selected artifact contract. */
 export function resolveBrowserWasmPaths(
   options: BrowserWasmPathInput = {}
 ): ResolvedBrowserWasmPaths {
@@ -62,7 +63,7 @@ export function resolveBrowserWasmPaths(
     sofficeWasm: requireNonEmptyPath('sofficeWasm', options.sofficeWasm ?? defaults.sofficeWasm),
     sofficeData: requireNonEmptyPath('sofficeData', options.sofficeData ?? defaults.sofficeData),
   };
-  const pthreadPaths = resolvePthreadWorkerPaths(options, defaults.sofficeWorkerJs);
+  const pthreadPaths = resolvePthreadWorkerPaths(options);
   return pthreadPaths.pthreadWorkerMode === 'external'
     ? { ...corePaths, ...pthreadPaths }
     : { ...corePaths, ...pthreadPaths };
@@ -92,9 +93,6 @@ export function locateBrowserRuntimeFile(
   path: string,
   paths: ResolvedBrowserWasmPaths
 ): string {
-  if (path.endsWith('.wasm')) return paths.sofficeWasm;
-  if (path.endsWith('.data')) return paths.sofficeData;
-
   if (isExternalPthreadWorkerRequest(path)) {
     if (paths.pthreadWorkerMode === 'main-script') {
       throw new Error(
@@ -103,6 +101,9 @@ export function locateBrowserRuntimeFile(
     }
     return paths.sofficeWorkerJs;
   }
+
+  if (path.endsWith('.wasm')) return paths.sofficeWasm;
+  if (path.endsWith('.data')) return paths.sofficeData;
 
   const baseUrl = paths.sofficeJs.substring(0, paths.sofficeJs.lastIndexOf('/') + 1);
   return `${baseUrl}${path}`;

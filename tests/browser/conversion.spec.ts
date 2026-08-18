@@ -33,6 +33,29 @@ test.describe('Browser Document Conversion', () => {
   });
 
   test('should convert DOCX to PDF', async ({ page }) => {
+    const requestPaths: string[] = [];
+    const pthreadWorkerUrls: string[] = [];
+    const standaloneWorkerRequests: string[] = [];
+    await page.route('**/*', async route => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname.split('/').at(-1) === 'soffice.worker.js') {
+        standaloneWorkerRequests.push(pathname);
+        await route.abort('blockedbyclient');
+        return;
+      }
+      await route.continue();
+    });
+    page.on('request', request => {
+      const pathname = new URL(request.url()).pathname;
+      requestPaths.push(pathname);
+    });
+    page.on('worker', worker => {
+      const pathname = new URL(worker.url()).pathname;
+      if (pathname.split('/').at(-1) === 'soffice.js') {
+        pthreadWorkerUrls.push(worker.url());
+      }
+    });
+
     await page.goto('/examples/browser-demo.html');
 
     // Get the test file path
@@ -73,6 +96,12 @@ test.describe('Browser Document Conversion', () => {
 
     // Check success message
     await expect(page.locator('#status')).toContainText('complete', { timeout: 10000 });
+
+    // The qualified browser profile starts pthreads from soffice.js through
+    // mainScriptUrlOrBlob and must never request a standalone worker artifact.
+    expect(requestPaths.some(pathname => pathname.split('/').at(-1) === 'soffice.js')).toBe(true);
+    expect(pthreadWorkerUrls.length).toBeGreaterThan(0);
+    expect(standaloneWorkerRequests).toEqual([]);
   });
 
   test('should convert XLSX to PDF', async ({ page }) => {

@@ -15,12 +15,13 @@ Align wrapper defaults, package assets, glue, and release schemas on the main-sc
 
 ## Acceptance Criteria
 
-- [ ] Wrapper default, glue behavior, browser-assets inventory, package files,
+- [x] Wrapper default, glue behavior, browser-assets inventory, package files,
       release spec, packager, and verifier all say `main-script`.
-- [ ] No package path at any depth is named `soffice.worker.js`.
+- [x] No package path at any depth is named `soffice.worker.js`.
 - [ ] Real-browser evidence shows zero standalone worker requests and successful
       pthread conversion using `soffice.js`/`mainScriptUrlOrBlob`.
-- [ ] Any wrapper/manifest byte change produces a different candidate identity.
+- [x] Any wrapper provenance, runtime-profile, identity-bearing manifest field,
+      or declared artifact byte/hash change produces a different candidate identity.
 
 ## Notes
 

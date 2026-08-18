@@ -326,19 +326,20 @@ export interface BrowserWasmCorePaths {
 /**
  * Explicit paths to WASM files (Browser).
  *
- * Omitting `pthreadWorkerMode` preserves the legacy external-worker contract.
- * A main-script artifact must not provide `sofficeWorkerJs`.
+ * Omitting `pthreadWorkerMode` selects the main-script contract.
+ * A main-script artifact must not provide `sofficeWorkerJs`; external-worker
+ * artifacts must select `external` and provide their Worker URL explicitly.
  */
 export type BrowserWasmPaths = BrowserWasmCorePaths & (
   | {
-    pthreadWorkerMode?: 'external';
-    /** URL to soffice.worker.js - required by external-worker glue */
-    sofficeWorkerJs: string;
-  }
-  | {
-    pthreadWorkerMode: 'main-script';
+    pthreadWorkerMode?: 'main-script';
     /** Main-script glue has no standalone pthread worker asset. */
     sofficeWorkerJs?: never;
+  }
+  | {
+    pthreadWorkerMode: 'external';
+    /** URL to soffice.worker.js - required by external-worker glue */
+    sofficeWorkerJs: string;
   }
 );
 
@@ -355,15 +356,15 @@ export interface BrowserConverterOptions {
   sofficeData?: string;
   /**
    * Pthread Worker bootstrap mode.
-   * Omitted values retain the legacy external-worker default.
+   * Omitted values select the main-script artifact contract.
    *
-   * @default 'external'
+   * @default 'main-script'
    */
   pthreadWorkerMode?: PthreadWorkerMode;
   /**
    * URL to soffice.worker.js.
-   * Defaults to /wasm/soffice.worker.js in external mode and must be omitted
-   * in main-script mode.
+   * Required when `pthreadWorkerMode` is explicitly `external`; otherwise it
+   * must be omitted. No external-worker URL is inferred or probed.
    */
   sofficeWorkerJs?: string;
 
@@ -483,7 +484,7 @@ export function createWasmPaths(baseUrl: string = DEFAULT_WASM_BASE_URL): Browse
     sofficeJs: `${base}soffice.js`,
     sofficeWasm: `${base}soffice.wasm`,
     sofficeData: `${base}soffice.data`,
-    sofficeWorkerJs: `${base}soffice.worker.js`,
+    pthreadWorkerMode: 'main-script',
   };
 }
 

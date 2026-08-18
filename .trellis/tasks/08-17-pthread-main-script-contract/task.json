@@ -3,7 +3,7 @@
   "name": "pthread-main-script-contract",
   "title": "Pthread main-script artifact contract",
   "description": "Align wrapper defaults, package assets, glue, and release schemas on the main-script pthread profile.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": "cross-layer",
   "package": null,
@@ -25,14 +25,17 @@
     "src/browser-runtime-paths.ts",
     "src/browser.ts",
     "src/browser.worker.ts",
+    "build/build-wasm.sh",
+    ".github/workflows/build-wasm.yml",
     "scripts/release-runtime/lib/constants.mjs",
     "scripts/release-runtime/lib/schemata.mjs",
     "scripts/release-runtime/lib/packager.mjs",
     "scripts/release-runtime/lib/verifier.mjs",
     "tests/browser-pthread-worker-mode.test.ts",
+    "tests/browser/conversion.spec.ts",
     "tests/package-contract.test.ts",
     "tests/release-runtime"
   ],
-  "notes": "",
+  "notes": "Wrapper and inventory implementation is complete. Runnable native-package and real-browser conversion gates remain assigned to successor-runtime qualification because checked-in large WASM/data files are Git LFS pointers.",
   "meta": {}
 }

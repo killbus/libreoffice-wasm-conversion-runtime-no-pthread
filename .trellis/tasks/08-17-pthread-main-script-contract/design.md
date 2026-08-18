@@ -57,6 +57,11 @@ list must reject `soffice.worker.js` at any nesting depth. Negative tests must
 reach the basename rule rather than fail earlier only because the asset count is
 wrong.
 
+The active native build entry point packages one explicit main-script profile.
+It validates the glue marker, rejects glue that names a standalone worker,
+removes stale worker outputs, and never infers a profile from an optional
+sidecar's existence. CI uploads only main-script profile assets.
+
 ## Browser proof
 
 Unit tests prove resolver and init-message behavior. The browser qualification
@@ -75,5 +80,6 @@ cannot be replaced by mocked Worker evidence.
 Rollback is an atomic revert of wrapper/resolver/schema/test changes. Never add
 a compatibility worker, edit the frozen candidate to match new wrapper bytes,
 or restore implicit external mode. Candidate identity derivation must continue
-to change for wrapper provenance, runtime profile, manifest, or artifact-byte
-changes.
+to change for wrapper provenance, runtime profile, identity-bearing manifest
+fields, or declared artifact-byte/hash changes. Formatting-only serialization
+changes are canonicalized and are not identity inputs.

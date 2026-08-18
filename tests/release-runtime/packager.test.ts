@@ -9,7 +9,7 @@ import {
 } from '../../scripts/release-runtime/lib/packager.mjs'
 import { verifyArchive } from '../../scripts/release-runtime/lib/verifier.mjs'
 import { extractZip } from '../../scripts/release-runtime/lib/zip-reader.mjs'
-import { validateFrozenSpec, SchemaError } from '../../scripts/release-runtime/lib/schemata.mjs'
+import { validateFrozenSpec } from '../../scripts/release-runtime/lib/schemata.mjs'
 import { makeSyntheticCandidate } from './helpers/synthetic-candidate.mjs'
 
 async function freshWork() {
@@ -186,12 +186,27 @@ describe('packager negative assembly', () => {
     }
   })
 
-  it('aborts on a forbidden standalone worker in the declared set', async () => {
+  it('aborts on a nested forbidden standalone worker in the declared set', async () => {
     const synth = await makeSyntheticCandidate()
     const { workRoot, dispose } = await freshWork()
     try {
-      const bad = { ...synth.spec, assets: [...synth.spec.assets, { path: 'wasm/soffice.worker.js', role: 'pthreadWorker', mimeType: 'text/javascript', bytes: 1, sha256: 'a'.repeat(64), sourceRoot: 'native', sourcePath: 'soffice.worker.js' }] }
-      expect(() => validateFrozenSpec(bad)).toThrow(SchemaError)
+      const bad = {
+        ...synth.spec,
+        assets: synth.spec.assets.map((asset, index) =>
+          index === 0
+            ? { ...asset, path: 'nested/runtime/soffice.worker.js' }
+            : asset
+        ),
+      }
+      await expect(
+        assemble({
+          nativeRoot: synth.nativeRoot,
+          wrapperRoot: synth.wrapperRoot,
+          workRoot,
+          spec: bad,
+          expectedCandidateId: synth.spec.candidateId,
+        })
+      ).rejects.toThrow(/forbidden worker asset present: soffice\.worker\.js/)
     } finally {
       await dispose()
       await synth.dispose()

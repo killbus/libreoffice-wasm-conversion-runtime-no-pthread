@@ -153,8 +153,6 @@ jobs:
             wasm/soffice.data
             wasm/soffice.cjs
             wasm/soffice.js
-            wasm/soffice.worker.cjs
-            wasm/soffice.worker.js
             wasm/soffice.data.js.metadata
           retention-days: 14
           if-no-files-found: warn
