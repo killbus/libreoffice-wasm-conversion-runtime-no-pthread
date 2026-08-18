@@ -9,8 +9,8 @@ from the qualifying commit, runtime mode, provenance, and every asset hash.
 
 ## Build boundary
 
-- Source ref: `a7fbf36d4dab4a0d1f88940a46b41ed6c1d75b58`.
-- Workflow: `Build WASM`, run `32145696172`.
+- Source ref: `0f583b66570bcecb9562220e0df1d823eb010362`.
+- Workflow: `Build WASM`, run `32146386224`.
 - Inputs: `conversion-only`, clean build, baseline autogen.
 - The workflow uploads artifacts only. It does not update LFS, create a release,
   publish npm, or promote a candidate.

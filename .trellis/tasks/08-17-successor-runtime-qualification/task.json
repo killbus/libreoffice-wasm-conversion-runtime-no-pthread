@@ -28,11 +28,11 @@
     "scripts/release-runtime/pack.mjs",
     "scripts/release-runtime/verify.mjs"
   ],
-  "notes": "Clean conversion-only successor build dispatched from a7fbf36; no publication or release promotion is authorized by this task.",
+  "notes": "Clean conversion-only successor build dispatched from 0f583b6 after the first attempt was blocked by exhausted LFS bandwidth; no publication or release promotion is authorized by this task.",
   "meta": {
-    "buildRunId": "32145696172",
-    "buildRunUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/actions/runs/32145696172",
-    "buildHeadSha": "a7fbf36d4dab4a0d1f88940a46b41ed6c1d75b58",
+    "buildRunId": "32146386224",
+    "buildRunUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/actions/runs/32146386224",
+    "buildHeadSha": "0f583b66570bcecb9562220e0df1d823eb010362",
     "buildMode": "conversion-only",
     "cleanBuild": true,
     "useConversionAutogen": false

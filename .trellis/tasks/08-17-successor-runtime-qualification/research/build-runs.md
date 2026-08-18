@@ -15,3 +15,12 @@ The successor workflow now checks out without LFS because it deletes the
 checked-in native assets before rebuilding them. Its subprocess-worker bundle
 is built through the pure sequential JS builder, while package/prepack builds
 continue to enforce the frozen native package gate.
+
+## Run 32146386224
+
+- Source: `0f583b66570bcecb9562220e0df1d823eb010362`
+- Inputs: `conversion-only`, `clean_build=true`,
+  `use_conversion_autogen=false`
+- Checkout without LFS succeeded and npm dependency installation completed.
+- Result: in progress; the qualification task remains open until the workflow
+  conversion gate and artifact upload both succeed.
