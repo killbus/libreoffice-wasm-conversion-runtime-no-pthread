@@ -1,8 +1,8 @@
 /**
- * Direct spreadsheet to PDF conversion test using LibreOfficeConverter
+ * Direct spreadsheet to PDF conversion test using the public converter facade
  * Tests both XLSX and CSV to isolate any CSV-specific issues
  */
-import { LibreOfficeConverter } from '../dist/server.js';
+import { createConverter } from '../dist/index.js';
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -51,21 +51,19 @@ async function testConversion(converter, inputPath, inputFormat, outputName) {
 }
 
 async function main() {
-  console.log('[Test] Creating LibreOfficeConverter directly...');
+  console.log('[Test] Creating converter...');
   
   // Import the WASM loader
   const wasmLoader = await import('../wasm/loader.cjs');
   
-  const converter = new LibreOfficeConverter({
+  console.log('[Test] Initializing converter...');
+  const initStart = Date.now();
+  const converter = await createConverter({
     wasmPath: join(__dirname, '../wasm'),
     wasmLoader,
     verbose: false, // Less verbose for cleaner output
     onProgress: (p) => console.log(`[Progress] ${p.phase} - ${p.percent}% - ${p.message}`),
   });
-
-  console.log('[Test] Initializing converter...');
-  const initStart = Date.now();
-  await converter.initialize();
   console.log(`[Test] Initialized in ${Date.now() - initStart}ms`);
 
   try {

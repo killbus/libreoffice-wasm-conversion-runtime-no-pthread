@@ -8,7 +8,11 @@
  *   node examples/node-conversion.mjs
  */
 
-import { createConverter } from '../dist/index.js';
+import {
+  createConverter,
+  EXTENSION_TO_FORMAT,
+  FORMAT_FILTERS,
+} from '../dist/index.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,7 +61,9 @@ It runs entirely in Node.js without any native dependencies.\par
   console.log(`  Duration: ${result.duration}ms\n`);
   
   // Save the PDF
-  const outputPath = '/tmp/libreoffice-wasm-example.pdf';
+  const outputDirectory = path.join(__dirname, '..', 'tmp');
+  fs.mkdirSync(outputDirectory, { recursive: true });
+  const outputPath = path.join(outputDirectory, 'libreoffice-wasm-example.pdf');
   fs.writeFileSync(outputPath, result.data);
   console.log(`  ✓ Saved to: ${outputPath}\n`);
 
@@ -66,9 +72,8 @@ It runs entirely in Node.js without any native dependencies.\par
   console.log('Supported Formats:');
   console.log('─────────────────────────────────────────');
   
-  const { LibreOfficeConverter } = await import('../dist/index.js');
-  const inputFormats = LibreOfficeConverter.getSupportedInputFormats();
-  const outputFormats = LibreOfficeConverter.getSupportedOutputFormats();
+  const inputFormats = [...new Set(Object.values(EXTENSION_TO_FORMAT))].sort();
+  const outputFormats = Object.keys(FORMAT_FILTERS).sort();
   
   console.log(`  Input:  ${inputFormats.slice(0, 8).join(', ')}...`);
   console.log(`  Output: ${outputFormats.join(', ')}\n`);
@@ -97,4 +102,3 @@ main().catch((error) => {
   }
   process.exit(1);
 });
-
