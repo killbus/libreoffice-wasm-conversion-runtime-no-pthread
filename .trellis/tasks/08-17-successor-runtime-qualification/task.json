@@ -3,16 +3,16 @@
   "name": "successor-runtime-qualification",
   "title": "Successor runtime qualification",
   "description": "Rebuild, assign a new candidate identity, and qualify the integrated successor only after contract repairs land.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
-  "scope": null,
+  "scope": "cross-layer",
   "package": null,
   "priority": "P1",
   "creator": "killbus",
   "assignee": "killbus",
   "createdAt": "2026-08-17",
   "completedAt": null,
-  "branch": null,
+  "branch": "fix/conversion-contract-integrity",
   "base_branch": "fix/conversion-contract-integrity",
   "worktree_path": null,
   "commit": null,
@@ -20,7 +20,21 @@
   "subtasks": [],
   "children": [],
   "parent": "08-17-close-conversion-runtime-contracts",
-  "relatedFiles": [],
-  "notes": "",
-  "meta": {}
+  "relatedFiles": [
+    ".github/workflows/build-wasm.yml",
+    "build/build-wasm.sh",
+    "scripts/release-runtime/candidate-spec.json",
+    "scripts/release-runtime/node-smoke-gate.cjs",
+    "scripts/release-runtime/pack.mjs",
+    "scripts/release-runtime/verify.mjs"
+  ],
+  "notes": "Clean conversion-only successor build dispatched from a7fbf36; no publication or release promotion is authorized by this task.",
+  "meta": {
+    "buildRunId": "32145696172",
+    "buildRunUrl": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/actions/runs/32145696172",
+    "buildHeadSha": "a7fbf36d4dab4a0d1f88940a46b41ed6c1d75b58",
+    "buildMode": "conversion-only",
+    "cleanBuild": true,
+    "useConversionAutogen": false
+  }
 }

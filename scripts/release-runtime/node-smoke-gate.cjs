@@ -2,10 +2,10 @@
 // node-smoke-gate.cjs — TEAM B Node DOCX->PDF smoke gate with explicit
 // converter cleanup evidence (acceptance remediation item 4).
 //
-// Uses the repository's built LibreOfficeConverter (dist/index.cjs) with the
-// EXTRACTED runtime bytes from the downloaded draft release archive as the
-// wasmLoader, matching the independent acceptance path. Unlike the rejected
-// attempt's bespoke gate, this gate explicitly destroys the converter and
+// Uses the repository's public createConverter() facade (dist/index.cjs) with
+// the EXTRACTED runtime bytes from the downloaded draft release archive as the
+// wasmLoader, matching the independent acceptance path. The gate explicitly
+// destroys the converter and
 // records the disposal in the result phases, closing the documented gap:
 // "The bespoke gate did not explicitly dispose the converter or otherwise
 // record clean cleanup."
@@ -53,7 +53,7 @@ const wasmLoader = require(loaderPath);
 
 const scriptDir = path.resolve(__dirname);
 const repoRoot = path.resolve(scriptDir, '..', '..');
-const { LibreOfficeConverter } = require(path.join(repoRoot, 'dist', 'index.cjs'));
+const { createConverter } = require(path.join(repoRoot, 'dist', 'index.cjs'));
 
 const RESULTS_PATH = 'node-smoke-result.json';
 
@@ -85,14 +85,16 @@ async function main() {
     const t0 = Date.now();
     log('init-start', { wasmDir });
 
-    converter = new LibreOfficeConverter({
+    converter = await createConverter({
       wasmLoader,
       wasmPath: wasmDir,
       verbose: false,
     });
-
-    await converter.initialize();
-    log('init-done', { ms: Date.now() - t0 });
+    log('init-done', {
+      ms: Date.now() - t0,
+      facadeKeys: Object.keys(converter).sort(),
+      frozen: Object.isFrozen(converter),
+    });
 
     const docxData = fs.readFileSync(inputDocx);
 
@@ -166,17 +168,24 @@ async function main() {
       return;
     }
 
-    // ABI exports present before disposal -----------------------------------------
-    const moduleBefore = converter.module;
+    // Parse downloaded bytes directly; the public facade deliberately exposes no
+    // Emscripten module or raw LOK bindings.
+    const nativeVerifier = await import(
+      path.join(repoRoot, 'scripts', 'verify-native-package-assets.mjs')
+    );
+    const wasmModule = new WebAssembly.Module(
+      fs.readFileSync(path.join(wasmDir, 'soffice.wasm'))
+    );
+    const wasmExports = WebAssembly.Module.exports(wasmModule).map((entry) => entry.name);
+    const lokExportDrift = nativeVerifier.findLokExportDrift(wasmExports);
     const abiExports = {
-      hasLokConvertDocument: typeof moduleBefore?._lok_convertDocument === 'function',
-      hasLokConvertFree: typeof moduleBefore?._lok_convertFree === 'function',
-      hasLibreofficekitHook: typeof moduleBefore?._libreofficekit_hook === 'function',
-      hasMalloc: typeof moduleBefore?._malloc === 'function',
+      lokExports: lokExportDrift.actual,
+      missing: lokExportDrift.missing,
+      extra: lokExportDrift.extra,
     };
     log('abi-exports', abiExports);
-    if (Object.values(abiExports).some((present) => !present)) {
-      fail('required ABI export missing');
+    if (abiExports.missing.length > 0 || abiExports.extra.length > 0) {
+      fail('conversion-only LOK export allowlist drift');
     }
   } catch (error) {
     fail(error instanceof Error ? error.stack ?? error.message : String(error));
@@ -188,11 +197,10 @@ async function main() {
         const disposed = {
           ms: Date.now() - cleanupStartedAt,
           destroyed: true,
-          moduleReleased: converter.module === null,
           initializedFalse: converter.isReady() === false,
         };
         log('cleanup', disposed);
-        if (!disposed.moduleReleased || !disposed.initializedFalse) {
+        if (!disposed.initializedFalse) {
           fail('converter cleanup was not recorded as clean');
         }
       } catch (error) {
