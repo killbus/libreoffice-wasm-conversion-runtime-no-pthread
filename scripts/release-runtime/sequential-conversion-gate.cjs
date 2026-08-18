@@ -53,7 +53,9 @@ function checkOutput(caseName, result) {
     'xlsx-csv': bytes.length > 0,
     'pptx-pdf': outputHead.subarray(0, 5).toString('ascii') === '%PDF-',
     'pdf-png': outputHead.subarray(0, 8).equals(Buffer.from('\x89PNG\r\n\x1a\n', 'binary')),
-    'pptx-svg': /^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(Buffer.from(bytes).toString('utf8', 0, 256)),
+    'pptx-svg': /^\uFEFF?\s*(?:<\?xml[^?]*\?>\s*)?(?:<!DOCTYPE\s+svg\b[^>]*>\s*)?<svg\b/i.test(
+      Buffer.from(bytes).toString('utf8', 0, 512),
+    ),
   };
   if (!checks[caseName]) throw new Error(`${caseName} failed output signature check`);
   return {
