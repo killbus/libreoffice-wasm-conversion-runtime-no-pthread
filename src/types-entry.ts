@@ -44,28 +44,11 @@ export type {
 } from './types.js';
 
 // ============================================
-// Emscripten module types (for advanced usage)
-// ============================================
-
-export type {
-  EmscriptenModule,
-  EmscriptenFS,
-} from './types.js';
-
-// ============================================
 // Converter interface types
 // ============================================
 
 export type {
   ILibreOfficeConverter,
-  InputFormatOptions,
-  PagePreview,
-  FullQualityPagePreview,
-  RenderOptions,
-  FullQualityRenderOptions,
-  DocumentInfo,
-  EditorSession,
-  EditorOperationResult,
 } from './types.js';
 
 // ============================================
@@ -87,8 +70,6 @@ export {
   EXTENSION_TO_FORMAT,
   INPUT_FORMAT_CATEGORY,
   CATEGORY_OUTPUT_FORMATS,
-  LOKDocumentType,
-  LOK_DOCTYPE_OUTPUT_FORMATS,
 } from './types.js';
 
 // ============================================
@@ -99,73 +80,10 @@ export {
   getValidOutputFormats,
   isConversionValid,
   getConversionErrorMessage,
-  getOutputFormatsForDocType,
   createWasmPaths,
   DEFAULT_WASM_BASE_URL,
 } from './types.js';
 
-// ============================================
-// Editor types
-// ============================================
-
-export type {
-  // Operation result types
-  OperationResult,
-  TruncationInfo,
-  OpenDocumentOptions,
-  // Writer types
-  TextPosition,
-  TextRange,
-  TextFormat,
-  Paragraph,
-  WriterStructure,
-  // Calc types
-  CellRef,
-  RangeRef,
-  ColRef,
-  SheetRef,
-  CellValue,
-  CellData,
-  CellFormat,
-  SheetInfo,
-  CalcStructure,
-  // Impress types
-  SlideLayout,
-  TextFrame,
-  SlideData,
-  SlideInfo,
-  ImpressStructure,
-  // Draw types
-  ShapeType,
-  ShapeData,
-  PageData,
-  PageInfo,
-  DrawStructure,
-  // Common types
-  Rectangle,
-  Size,
-  Position,
-  DocumentMetadata,
-  DocumentStructure,
-  DocumentType,
-  SelectionRange,
-  FindOptions,
-} from './editor/types.js';
-
-// LLM tool types (from tools.ts, not types.ts)
-export type {
-  ToolDefinition,
-  CommonToolName,
-  WriterToolName,
-  CalcToolName,
-  ImpressToolName,
-  DrawToolName,
-  DocumentToolName,
-  AllToolName,
-  ToolParameters,
-} from './editor/tools.js';
-
-// ============================================
 // Image utility types
 // ============================================
 
@@ -174,4 +92,4 @@ export type { ImageEncodeOptions } from './image-utils.js';
 /**
  * Image format options for exportAsImage
  */
-export type ImageFormat = 'png' | 'jpg' | 'svg';
+export type ImageFormat = 'png' | 'svg';

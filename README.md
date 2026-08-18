@@ -38,15 +38,15 @@ import { exportAsImage } from '@killbus/libreoffice-converter';
 import fs from 'fs';
 
 // Export single page (0-indexed)
-const [cover] = await exportAsImage(docxBuffer, 0, 'png');
+const [cover] = await exportAsImage(docxBuffer, 'docx', 0, 'png');
 fs.writeFileSync('cover.png', cover.data);
 
 // Export multiple pages
-const slides = await exportAsImage(pptxBuffer, [0, 1, 2], 'png');
+const slides = await exportAsImage(pptxBuffer, 'pptx', [0, 1, 2], 'png');
 slides.forEach((img, i) => fs.writeFileSync(`slide-${i}.png`, img.data));
 
 // Export with options
-const highRes = await exportAsImage(pptxBuffer, [0, 1, 2], 'png', { dpi: 300, width: 1920 });
+const highRes = await exportAsImage(pptxBuffer, 'pptx', [0, 1, 2], 'png', { dpi: 300, width: 1920 });
 ```
 
 ### Server Usage (Recommended)
@@ -54,9 +54,9 @@ const highRes = await exportAsImage(pptxBuffer, [0, 1, 2], 'png', { dpi: 300, wi
 For servers, use the worker converter to avoid blocking the main thread:
 
 ```javascript
-import { createWorkerConverter } from '@killbus/libreoffice-converter/server';
+import { createConverter } from '@killbus/libreoffice-converter/server';
 
-const converter = await createWorkerConverter();
+const converter = await createConverter();
 
 // Reuse for multiple conversions
 const pdf = await converter.convert(docxBuffer, { outputFormat: 'pdf' });
@@ -69,14 +69,14 @@ await converter.destroy(); // Clean up when done
 
 **Input:** doc, docx, xls, xlsx, ppt, pptx, odt, ods, odp, rtf, txt, html, csv, pdf, epub
 
-**Output:** pdf, docx, doc, odt, rtf, txt, html, xlsx, xls, ods, csv, pptx, ppt, odp, png, jpg, svg
+**Output:** pdf, docx, doc, odt, rtf, txt, html, xlsx, xls, ods, csv, pptx, ppt, odp, png, svg
 
 ## Browser Usage
 
 ```javascript
-import { WorkerBrowserConverter, createWasmPaths } from '@killbus/libreoffice-converter/browser';
+import { createWorkerBrowserConverter, createWasmPaths } from '@killbus/libreoffice-converter/browser';
 
-const converter = new WorkerBrowserConverter({
+const converter = createWorkerBrowserConverter({
   ...createWasmPaths('/wasm/'),
   browserWorkerJs: '/assets/libreoffice/browser.worker.global.js',
   pthreadWorkerMode: 'main-script',
@@ -120,7 +120,7 @@ for (const asset of Object.values(LIBREOFFICE_BROWSER_ASSET_CONTRACT.assets)) {
 
 The current contract is `pthreadWorkerMode: 'main-script'`; do not deploy or configure
 an external `soffice.worker.js`. Serve the four declared assets with their declared MIME
-types, and pass the resulting URLs to `WorkerBrowserConverter`.
+types, and pass the resulting URLs to `createWorkerBrowserConverter`.
 **Required HTTP headers** for SharedArrayBuffer:
 ```
 Cross-Origin-Opener-Policy: same-origin
@@ -134,7 +134,7 @@ The WASM build includes Latin, Arabic, Hebrew, and other common fonts. For CJK (
 ### Using System Fonts (Node.js)
 
 ```javascript
-const converter = await createSubprocessConverter({ includeSystemFonts: true });
+const converter = await createConverter({ includeSystemFonts: true });
 ```
 
 ### Using @fontsource Packages
@@ -146,13 +146,13 @@ npm install @fontsource/noto-sans-jp @fontsource/noto-sans-kr
 ```
 
 ```javascript
-import { loadFontsFromPackages, createSubprocessConverter } from '@killbus/libreoffice-converter';
+import { loadFontsFromPackages, createConverter } from '@killbus/libreoffice-converter';
 
 const fonts = await loadFontsFromPackages([
   '@fontsource/noto-sans-jp',
   '@fontsource/noto-sans-kr',
 ]);
-const converter = await createSubprocessConverter({ fonts });
+const converter = await createConverter({ fonts });
 ```
 
 ### Using Prebuilt Font Bundles
@@ -170,28 +170,28 @@ Download regional font bundles from [GitHub Releases](https://github.com/killbus
 | `fonts-all.zip` | All of the above | ~264 MB |
 
 ```javascript
-import { loadFontsFromZip, createSubprocessConverter } from '@killbus/libreoffice-converter';
+import { loadFontsFromZip, createConverter } from '@killbus/libreoffice-converter';
 
 const fonts = await loadFontsFromZip('./fonts/fonts-cjk.zip');
-const converter = await createSubprocessConverter({ fonts });
+const converter = await createConverter({ fonts });
 ```
 
 ### Custom Font Files
 
 ```javascript
-import { loadFontsFromDirectory, createSubprocessConverter } from '@killbus/libreoffice-converter';
+import { loadFontsFromDirectory, createConverter } from '@killbus/libreoffice-converter';
 
 const fonts = await loadFontsFromDirectory('./my-fonts/');
-const converter = await createSubprocessConverter({ fonts });
+const converter = await createConverter({ fonts });
 ```
 
 ### Browser Font Loading
 
 ```javascript
-import { loadFontsFromUrl, WorkerBrowserConverter } from '@killbus/libreoffice-converter/browser';
+import { loadFontsFromUrl, createWorkerBrowserConverter } from '@killbus/libreoffice-converter/browser';
 
 const fonts = await loadFontsFromUrl('/assets/fonts-cjk.zip');
-const converter = new WorkerBrowserConverter({ ...wasmPaths, fonts });
+const converter = createWorkerBrowserConverter({ ...wasmPaths, fonts });
 await converter.initialize();
 ```
 

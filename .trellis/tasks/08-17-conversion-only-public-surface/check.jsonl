@@ -1,0 +1,4 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Audit every entry point and ensure no unsupported capability remains publicly reachable."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check that entry points share the facade and allowlists instead of drifting."}
+{"file":".trellis/tasks/08-17-conversion-only-public-surface/research/export-inventory.md","reason":"Compare package and WASM evidence to the exact recorded inventories."}
+{"file":".trellis/tasks/08-17-conversion-only-public-surface/design.md","reason":"Check runtime keys, compile-time negatives, supported formats, and immutable native bytes."}

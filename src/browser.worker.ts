@@ -7,7 +7,7 @@
 
 import type { ConversionOptions, EditorOperationResult, EmscriptenModule, PthreadWorkerMode, WasmLoadPhase, WasmLoadProgress } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
-import { FORMAT_FILTER_OPTIONS, OUTPUT_FORMAT_TO_LOK, buildLoadOptions } from './types.js';
+import { buildLoadOptions } from './types.js';
 import {
   locateBrowserRuntimeFile,
   validateExplicitBrowserWasmPaths,
@@ -280,6 +280,7 @@ interface WorkerMessage {
   outputFormat?: string;
   filterOptions?: string;
   password?: string;
+  image?: ConversionOptions['image'];
   maxWidth?: number;
   pageIndex?: number; // For renderSinglePage / renderPageViaConvert / renderPageFullQuality
   // Full quality rendering parameters
@@ -697,17 +698,14 @@ async function handleInit(msg: WorkerMessage) {
     converter = new LibreOfficeConverter({ verbose, fonts });
     await converter.initializeWithModule(module);
 
-    // Get LOK bindings from converter for direct access (needed for browser-specific features)
+    // Keep the private bindings for legacy internal handlers. Public conversion
+    // requests use only LibreOfficeConverter.convert(), which is backed by the
+    // conversion-only native transaction.
     lokBindings = converter.getLokBindings();
 
     if (!lokBindings) {
       throw new Error('Failed to get LOK bindings from converter');
     }
-
-    // Enable synchronous event dispatch (Unipoll mode) globally
-    // Without this, postKeyEvent/postMouseEvent events are queued but never processed
-    lokBindings.enableSyncEvents();
-    console.log('[LOK Worker] Enabled synchronous event dispatch (Unipoll mode)');
 
     initialized = true;
     emitPhaseProgress('ready', 'Ready');
@@ -722,9 +720,6 @@ async function handleInit(msg: WorkerMessage) {
   }
 }
 
-// Image formats that need multi-page handling
-const IMAGE_FORMATS = ['png', 'jpg', 'jpeg', 'svg'];
-
 function discardQuarantinedRuntime(): void {
   // Do not call destroy() on a runtime whose native cleanup is uncertain.
   // Terminating this Worker releases the discarded module and any live handles.
@@ -738,7 +733,7 @@ function discardQuarantinedRuntime(): void {
 }
 
 async function handleConvert(msg: WorkerMessage) {
-  if (!initialized || !module || !lokBindings || !converter) {
+  if (!initialized || !converter) {
     postResponse({ type: 'error', id: msg.id, error: 'Worker not initialized' });
     return;
   }
@@ -752,186 +747,34 @@ async function handleConvert(msg: WorkerMessage) {
 
   const normalizedInputExt = (inputExt || 'docx').toLowerCase();
   const normalizedOutputFormat = outputFormat.toLowerCase();
-  const isImageFormat = IMAGE_FORMATS.includes(normalizedOutputFormat);
-
-  // Basic document conversion uses the official hidden native transaction.
-  // Image conversion intentionally retains raw document pointers for page-by-page export.
-  if (!isImageFormat) {
-    const activeConverter = converter;
-    try {
-      postProgress(msg.id, 10, 'Running hidden native conversion...');
-      const conversion = await activeConverter.convert(
-        inputData,
-        {
-          inputFormat: normalizedInputExt as ConversionOptions['inputFormat'],
-          outputFormat: normalizedOutputFormat as ConversionOptions['outputFormat'],
-          ...(filterOptions === undefined ? {} : { filterOptions }),
-          ...(password === undefined ? {} : { password }),
-        },
-        `doc.${normalizedInputExt}`
-      );
-
-      // Worker responses must own a regular transferable ArrayBuffer.
-      const result = new Uint8Array(conversion.data.length);
-      result.set(conversion.data);
-
-      postProgress(msg.id, 100, 'Complete');
-      postResponse({ type: 'result', id: msg.id, data: result });
-    } catch (error) {
-      const quarantine = !activeConverter.isReady();
-      postResponse({
-        type: 'error',
-        id: msg.id,
-        error: error instanceof Error ? error.message : String(error),
-        ...(quarantine ? { quarantine: true } : {}),
-      });
-      if (quarantine) {
-        discardQuarantinedRuntime();
-      }
-    }
-    return;
-  }
-
-  const inPath = `/tmp/input/doc.${normalizedInputExt}`;
-  const outPath = `/tmp/output/doc.${normalizedOutputFormat}`;
-  let docPtr = 0;
-  const outputFiles: string[] = []; // Track files to clean up
-
+  const activeConverter = converter;
   try {
-    postProgress(msg.id, 10, 'Writing input file...');
-    module.FS.writeFile(inPath, inputData);
+    postProgress(msg.id, 10, 'Running hidden native conversion...');
+    const conversion = await activeConverter.convert(
+      inputData,
+      {
+        inputFormat: normalizedInputExt as ConversionOptions['inputFormat'],
+        outputFormat: normalizedOutputFormat as ConversionOptions['outputFormat'],
+        ...(filterOptions === undefined ? {} : { filterOptions }),
+        ...(password === undefined ? {} : { password }),
+        ...(msg.image === undefined ? {} : { image: msg.image }),
+      },
+      `doc.${normalizedInputExt}`
+    );
 
-    postProgress(msg.id, 30, 'Loading document...');
-    // Build load options for CSV import filter and/or password
-    const loadOptions = buildLoadOptions(normalizedInputExt, password);
-    if (loadOptions) {
-      docPtr = lokBindings.documentLoadWithOptions(inPath, loadOptions);
-    } else {
-      docPtr = lokBindings.documentLoad(inPath);
-    }
-
-    if (docPtr === 0) {
-      const error = lokBindings.getError();
-      throw new Error(error || 'Failed to load document');
-    }
-
-    // Get page count for multi-page image export
-    const pageCount = lokBindings.documentGetParts(docPtr);
-    const docType = lokBindings.documentGetDocumentType(docPtr);
-
-    // For image formats with multiple pages, export each page separately and zip
-    if (pageCount > 1) {
-      postProgress(msg.id, 40, `Exporting ${pageCount} pages as ${normalizedOutputFormat.toUpperCase()}...`);
-
-      const lokFormat = OUTPUT_FORMAT_TO_LOK[normalizedOutputFormat as keyof typeof OUTPUT_FORMAT_TO_LOK];
-      const baseOpts = filterOptions || FORMAT_FILTER_OPTIONS[normalizedOutputFormat as keyof typeof FORMAT_FILTER_OPTIONS] || '';
-
-      // Export each page
-      const pageFiles: Array<{ name: string; data: Uint8Array }> = [];
-
-      // Get document size for calculating export dimensions (for image formats)
-      const { width: docWidth, height: docHeight } = lokBindings.documentGetDocumentSize(docPtr);
-      const aspectRatio = docHeight / docWidth;
-      const exportWidth = 1024; // High quality export
-      const exportHeight = Math.round(exportWidth * aspectRatio);
-
-      for (let i = 0; i < pageCount; i++) {
-        const progress = 40 + Math.round((i / pageCount) * 40);
-        postProgress(msg.id, progress, `Exporting page ${i + 1}/${pageCount}...`);
-
-        const pageOutPath = `/tmp/output/page_${i + 1}.${normalizedOutputFormat}`;
-        outputFiles.push(pageOutPath);
-
-        // For presentations/drawings, we need to set the part AND use PixelWidth/PixelHeight
-        // for PNG/JPG export to work correctly (same approach as handleRenderPageViaConvert)
-        if (docType === 2 || docType === 3) { // PRESENTATION or DRAWING
-          lokBindings.documentSetPart(docPtr, i);
-
-          // For image formats, include pixel dimensions in filter options
-          let pageOpts = baseOpts;
-          if (normalizedOutputFormat === 'png' || normalizedOutputFormat === 'jpg' || normalizedOutputFormat === 'jpeg') {
-            pageOpts = `PixelWidth=${exportWidth};PixelHeight=${exportHeight}`;
-            if (baseOpts) pageOpts = `${baseOpts};${pageOpts}`;
-          }
-
-          lokBindings.documentSaveAs(docPtr, pageOutPath, lokFormat, pageOpts);
-          console.log(`[Worker] Page ${i + 1} (presentation) exported with opts: ${pageOpts}`);
-        } else {
-          // For text documents, use PageRange filter option (1-indexed)
-          let pageOpts = `PageRange=${i + 1}-${i + 1}`;
-
-          // For image formats, also include pixel dimensions
-          if (normalizedOutputFormat === 'png' || normalizedOutputFormat === 'jpg' || normalizedOutputFormat === 'jpeg') {
-            pageOpts += `;PixelWidth=${exportWidth};PixelHeight=${exportHeight}`;
-          }
-
-          if (baseOpts) pageOpts = `${baseOpts};${pageOpts}`;
-
-          lokBindings.documentSaveAs(docPtr, pageOutPath, lokFormat, pageOpts);
-          console.log(`[Worker] Page ${i + 1} (text) exported with opts: ${pageOpts}`);
-        }
-
-        const pageData = module.FS.readFile(pageOutPath) as Uint8Array;
-        console.log(`[Worker] Page ${i + 1} exported: ${pageData.length} bytes`);
-
-        if (pageData.length > 0) {
-          const pageCopy = new Uint8Array(pageData.length);
-          pageCopy.set(pageData);
-          pageFiles.push({ name: `page_${i + 1}.${normalizedOutputFormat}`, data: pageCopy });
-        } else {
-          console.warn(`[Worker] Page ${i + 1} export produced empty file`);
-        }
-      }
-
-      postProgress(msg.id, 85, 'Creating ZIP archive...');
-
-      // Create a simple ZIP file (no compression for images)
-      const zipData = createSimpleZip(pageFiles);
-
-      postProgress(msg.id, 100, 'Complete');
-      postResponse({ type: 'result', id: msg.id, data: zipData });
-
-    } else {
-      // Single-page image export remains on the raw LOK path.
-      postProgress(msg.id, 50, 'Converting...');
-
-      const lokFormat = OUTPUT_FORMAT_TO_LOK[normalizedOutputFormat as keyof typeof OUTPUT_FORMAT_TO_LOK];
-      const opts = filterOptions || FORMAT_FILTER_OPTIONS[normalizedOutputFormat as keyof typeof FORMAT_FILTER_OPTIONS] || '';
-
-      postProgress(msg.id, 70, 'Saving...');
-      lokBindings.documentSaveAs(docPtr, outPath, lokFormat, opts);
-      outputFiles.push(outPath);
-
-      postProgress(msg.id, 90, 'Reading output...');
-      const sharedResult = module.FS.readFile(outPath) as Uint8Array;
-
-      if (sharedResult.length === 0) {
-        throw new Error('Conversion produced empty output');
-      }
-
-      // Copy from SharedArrayBuffer to regular ArrayBuffer for transfer
-      const result = new Uint8Array(sharedResult.length);
-      result.set(sharedResult);
-
-      postProgress(msg.id, 100, 'Complete');
-      postResponse({ type: 'result', id: msg.id, data: result });
-    }
-
+    const result = new Uint8Array(conversion.data.length);
+    result.set(conversion.data);
+    postProgress(msg.id, 100, 'Complete');
+    postResponse({ type: 'result', id: msg.id, data: result });
   } catch (error) {
+    const quarantine = !activeConverter.isReady();
     postResponse({
       type: 'error',
       id: msg.id,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      ...(quarantine ? { quarantine: true } : {}),
     });
-  } finally {
-    // Cleanup the legacy image transaction only.
-    if (docPtr !== 0) {
-      try { lokBindings.documentDestroy(docPtr); } catch { /* ignore */ }
-    }
-    try { module.FS.unlink(inPath); } catch { /* ignore */ }
-    for (const path of outputFiles) {
-      try { module.FS.unlink(path); } catch { /* ignore */ }
-    }
+    if (quarantine) discardQuarantinedRuntime();
   }
 }
 
@@ -1026,6 +869,9 @@ function createSimpleZip(files: Array<{ name: string; data: Uint8Array }>): Uint
 
   return result;
 }
+
+// Retained for compatibility with the private legacy handler below.
+void createSimpleZip;
 
 /**
  * CRC-32 calculation for ZIP files
@@ -1408,10 +1254,10 @@ async function handleGetDocumentInfo(msg: WorkerMessage) {
 
     // Map document type to valid output formats (based on LibreOffice capabilities)
     const docTypeOutputFormats: Record<number, string[]> = {
-      0: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'png', 'jpg', 'svg'], // TEXT
-      1: ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'html', 'png', 'jpg', 'svg'],        // SPREADSHEET
-      2: ['pdf', 'pptx', 'ppt', 'odp', 'png', 'jpg', 'svg', 'html'],              // PRESENTATION
-      3: ['pdf', 'png', 'jpg', 'svg', 'html'],                                     // DRAWING
+      0: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'png'],             // TEXT
+      1: ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'html', 'png'],            // SPREADSHEET
+      2: ['pdf', 'pptx', 'ppt', 'odp', 'png', 'svg', 'html'],            // PRESENTATION
+      3: ['pdf', 'png', 'svg', 'html'],                                  // DRAWING
       4: ['pdf'],                                                                   // OTHER
     };
 

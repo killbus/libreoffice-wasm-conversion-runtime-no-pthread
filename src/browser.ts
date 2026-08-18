@@ -24,8 +24,7 @@ export type {
   ProgressInfo,
   WasmLoadPhase,
   WasmLoadProgress,
-  EmscriptenModule,
-  EmscriptenFS,
+  ILibreOfficeConverter,
 } from './types.js';
 
 export {
@@ -40,30 +39,6 @@ export {
 
 // Font loading utilities (browser-compatible)
 export { loadFontsFromUrl } from './font-loader.browser.js';
-
-// Export editor API
-export {
-  createEditor,
-  isWriterEditor,
-  isCalcEditor,
-  isImpressEditor,
-  isDrawEditor,
-  OfficeEditor,
-  WriterEditor,
-  CalcEditor,
-  ImpressEditor,
-  DrawEditor,
-} from './editor/index.js';
-
-export type {
-  OperationResult,
-  OpenDocumentOptions,
-  DocumentStructure,
-  WriterStructure,
-  CalcStructure,
-  ImpressStructure,
-  DrawStructure,
-} from './editor/types.js';
 
 import {
   ConversionError,
@@ -101,6 +76,7 @@ import {
   locateBrowserRuntimeFile,
   resolveBrowserWasmPaths,
 } from './browser-runtime-paths.js';
+import { exposeConversionOnly } from './conversion-only.js';
 import { LOKBindings } from './lok-bindings.js';
 import {
   NativeConversionError,
@@ -172,7 +148,7 @@ interface WorkerResponse {
  * on the main thread and can return editor objects directly. Use WorkerBrowserConverter
  * for the standard session-based API.
  */
-export class BrowserConverter {
+class BrowserConverter {
   private module: EmscriptenModule | null = null;
   private _lokInstance: number = 0;
   private lokBindings: LOKBindings | null = null;
@@ -397,7 +373,7 @@ export class BrowserConverter {
       this.quarantineRuntime();
       throw error;
     }
-    const isImageFormat = ['png', 'jpg', 'svg'].includes(outputExt);
+    const isImageFormat = outputExt === 'png' || outputExt === 'svg';
     let docPtr = 0;
     let primaryError: unknown;
     let conversionFailed = false;
@@ -406,7 +382,6 @@ export class BrowserConverter {
       this.module.FS.writeFile(inPath, inputData);
 
       if (isImageFormat) {
-        // Rendering/image export intentionally keeps the live document-pointer path.
         this.emitProgress('converting', 30, 'Loading document...');
         if (options.password) {
           docPtr = this.lokBindings.documentLoadWithOptions(inPath, `,Password=${options.password}`);
@@ -420,7 +395,13 @@ export class BrowserConverter {
         }
 
         const lokFormat = OUTPUT_FORMAT_TO_LOK[outputExt];
-        const filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
+        let filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
+        if (options.image?.pageIndex !== undefined) {
+          const page = options.image.pageIndex + 1;
+          filterOptions = filterOptions
+            ? `${filterOptions};PageRange=${page}-${page}`
+            : `PageRange=${page}-${page}`;
+        }
         this.emitProgress('converting', 70, 'Saving...');
         this.lokBindings.documentSaveAs(docPtr, outPath, lokFormat, filterOptions);
       } else {
@@ -656,7 +637,7 @@ export class BrowserConverter {
  * Runs WASM module in a Web Worker to avoid blocking the main thread.
  * Implements ILibreOfficeConverter for consistent API across platforms.
  */
-export class WorkerBrowserConverter implements ILibreOfficeConverter {
+class WorkerBrowserConverter implements ILibreOfficeConverter {
   private worker: Worker | null = null;
   private initialized = false;
   private initializing = false;
@@ -939,25 +920,10 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
       outputFormat: outputExt,
       filterOptions,
       password: options.password,
+      image: options.image,
     }) as Uint8Array;
 
     const baseName = filename.includes('.') ? filename.substring(0, filename.lastIndexOf('.')) : filename;
-
-    // Check if result is a ZIP file (multi-page image export)
-    // ZIP files start with PK (0x50, 0x4B)
-    const isZip = result.length >= 2 && result[0] === 0x50 && result[1] === 0x4B;
-    const IMAGE_FORMATS = ['png', 'jpg', 'jpeg', 'svg'];
-    const isImageFormat = IMAGE_FORMATS.includes(outputExt.toLowerCase());
-
-    if (isZip && isImageFormat) {
-      // Multi-page image export returns a ZIP
-      return {
-        data: result,
-        mimeType: 'application/zip',
-        filename: `${baseName}_pages.zip`,
-        duration: Date.now() - startTime,
-      };
-    }
 
     return {
       data: result,
@@ -1563,7 +1529,7 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
  * This class provides a clean API that mirrors the server-side editor classes
  * but communicates through the worker message protocol.
  */
-export class BrowserEditorProxy implements EditorSession {
+class BrowserEditorProxy implements EditorSession {
   private converter: WorkerBrowserConverter;
   private _sessionId: string;
   private _documentType: 'writer' | 'calc' | 'impress' | 'draw';
@@ -1733,6 +1699,20 @@ export class BrowserEditorProxy implements EditorSession {
       throw new Error('Document session is closed');
     }
   }
+}
+
+/** Create an uninitialized main-thread conversion-only browser facade. */
+export function createBrowserConverter(
+  options: BrowserConverterOptions = {}
+): ILibreOfficeConverter {
+  return exposeConversionOnly(new BrowserConverter(options));
+}
+
+/** Create an uninitialized Worker-owned conversion-only browser facade. */
+export function createWorkerBrowserConverter(
+  options: WorkerBrowserConverterOptions = {}
+): ILibreOfficeConverter {
+  return exposeConversionOnly(new WorkerBrowserConverter(options));
 }
 
 /**

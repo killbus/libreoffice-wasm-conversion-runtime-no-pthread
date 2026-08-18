@@ -304,7 +304,7 @@ start();
 
 ```jsx
 import { useState, useEffect, useCallback } from 'react';
-import { BrowserConverter } from '@matbee/libreoffice-converter/browser';
+import { createBrowserConverter } from '@matbee/libreoffice-converter/browser';
 
 export function DocumentConverter() {
   const [converter, setConverter] = useState(null);
@@ -317,7 +317,7 @@ export function DocumentConverter() {
     let conv;
 
     async function init() {
-      conv = new BrowserConverter({
+      conv = createBrowserConverter({
         wasmPath: '/wasm',
         onProgress: (info) => {
           setProgress(info.percent);
@@ -429,7 +429,7 @@ export function DocumentConverter() {
 ```jsx
 // ConverterContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
-import { BrowserConverter } from '@matbee/libreoffice-converter/browser';
+import { createBrowserConverter } from '@matbee/libreoffice-converter/browser';
 
 const ConverterContext = createContext(null);
 
@@ -438,7 +438,7 @@ export function ConverterProvider({ children }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const conv = new BrowserConverter({ wasmPath: '/wasm' });
+    const conv = createBrowserConverter({ wasmPath: '/wasm' });
     conv.initialize().then(() => {
       setConverter(conv);
       setIsReady(true);
@@ -485,7 +485,7 @@ function ConvertButton({ file }) {
 ```javascript
 // useConverter.js
 import { ref, onMounted, onUnmounted } from 'vue';
-import { BrowserConverter } from '@matbee/libreoffice-converter/browser';
+import { createBrowserConverter } from '@matbee/libreoffice-converter/browser';
 
 export function useConverter() {
   const converter = ref(null);
@@ -494,7 +494,7 @@ export function useConverter() {
   const progress = ref(0);
 
   onMounted(async () => {
-    const conv = new BrowserConverter({
+    const conv = createBrowserConverter({
       wasmPath: '/wasm',
       onProgress: (info) => {
         progress.value = info.percent;
@@ -909,4 +909,3 @@ createConverter({ wasmPath: './wasm' }).then((c) => {
   app.listen(3000);
 });
 ```
-

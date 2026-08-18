@@ -683,7 +683,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     inputFormat: string,
     options: ConversionOptions
   ): Promise<Uint8Array> {
-    if (['png', 'jpg', 'svg'].includes(options.outputFormat)) {
+    if (options.outputFormat === 'png' || options.outputFormat === 'svg') {
       return this.performLegacyImageConversion(
         inputPath,
         outputPath,
@@ -800,8 +800,8 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         filterOptions = buildPdfFilterOptions(options.pdf) || filterOptions;
       }
 
-      // Add page selection for image exports (png, jpg, svg)
-      if (['png', 'jpg', 'svg'].includes(options.outputFormat) && options.image?.pageIndex !== undefined) {
+      // Add page selection for image exports.
+      if (options.image?.pageIndex !== undefined) {
         // PageRange is 1-indexed
         const pageNum = options.image.pageIndex + 1;
         if (filterOptions) {

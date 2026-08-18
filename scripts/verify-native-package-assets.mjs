@@ -16,9 +16,21 @@ const expectedNativePaths = Object.freeze([
   'wasm/soffice.js',
   'wasm/soffice.wasm',
 ]);
-const requiredNativeExports = Object.freeze([
+export const expectedLokExports = Object.freeze([
+  'lok_abortOperation',
   'lok_convertDocument',
   'lok_convertFree',
+  'lok_destroy',
+  'lok_documentDestroy',
+  'lok_documentLoad',
+  'lok_documentLoadWithOptions',
+  'lok_documentSaveAs',
+  'lok_getError',
+  'lok_getOperationState',
+  'lok_preinit',
+  'lok_preinit_2',
+  'lok_resetAbort',
+  'lok_setOperationTimeout',
 ]);
 const requiredGlueBindings = Object.freeze([
   '_lok_convertDocument',
@@ -37,6 +49,18 @@ export function findMissingGlueBindings(source) {
   return requiredGlueBindings.filter(
     (binding) => !source.includes(`Module["${binding}"]`),
   );
+}
+
+export function findLokExportDrift(exportNames) {
+  const actual = [...new Set(exportNames)]
+    .filter((name) => name.startsWith('lok_'))
+    .sort();
+  const expected = [...expectedLokExports].sort();
+  return {
+    actual,
+    missing: expected.filter((name) => !actual.includes(name)),
+    extra: actual.filter((name) => !expected.includes(name)),
+  };
 }
 
 export async function verifyNativePackageAssets({
@@ -95,12 +119,10 @@ export async function verifyNativePackageAssets({
   const wasmExports = new Set(
     WebAssembly.Module.exports(wasmModule).map((entry) => entry.name),
   );
-  const missingWasmExports = requiredNativeExports.filter(
-    (name) => !wasmExports.has(name),
-  );
-  if (missingWasmExports.length > 0) {
+  const lokExportDrift = findLokExportDrift(wasmExports);
+  if (lokExportDrift.missing.length > 0 || lokExportDrift.extra.length > 0) {
     fail(
-      `wasm/soffice.wasm is missing exports: ${missingWasmExports.join(', ')}`,
+      `wasm/soffice.wasm LOK export drift; missing=${JSON.stringify(lokExportDrift.missing)}, extra=${JSON.stringify(lokExportDrift.extra)}`,
     );
   }
 
@@ -115,7 +137,7 @@ export async function verifyNativePackageAssets({
   return {
     candidateId: frozenSpec.candidateId,
     assets: verifiedAssets,
-    requiredNativeExports: [...requiredNativeExports],
+    expectedLokExports: [...expectedLokExports],
     requiredGlueBindings: [...requiredGlueBindings],
   };
 }
@@ -128,7 +150,7 @@ if (isCli) {
   try {
     const report = await verifyNativePackageAssets();
     console.log(
-      `[native-package-assets] verified candidate ${report.candidateId}: ${report.assets.length} native assets, exports ${report.requiredNativeExports.join(', ')}`,
+      `[native-package-assets] verified candidate ${report.candidateId}: ${report.assets.length} native assets, exports ${report.expectedLokExports.join(', ')}`,
     );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

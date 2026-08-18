@@ -330,7 +330,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('getPageCount', () => {
+    describe.skip('getPageCount (not in conversion-only ABI)', () => {
       it('should get page count for DOCX', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 
@@ -362,7 +362,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('getDocumentInfo', () => {
+    describe.skip('getDocumentInfo (not in conversion-only ABI)', () => {
       it('should get document info for DOCX', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 
@@ -399,7 +399,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('renderPage', () => {
+    describe.skip('renderPage (not in conversion-only ABI)', () => {
       it('should render a single page from DOCX', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 
@@ -436,7 +436,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('renderPagePreviews', () => {
+    describe.skip('renderPagePreviews (not in conversion-only ABI)', () => {
       it('should render all pages from a document', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 
@@ -484,7 +484,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('getDocumentText', () => {
+    describe.skip('getDocumentText (not in conversion-only ABI)', () => {
       it('should extract text from DOCX', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 
@@ -504,7 +504,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('getPageNames', () => {
+    describe.skip('getPageNames (not in conversion-only ABI)', () => {
       it('should get slide names from PPTX', async () => {
         if (!converter?.isReady() || !fs.existsSync(testPptxPath)) return;
 
@@ -524,7 +524,7 @@ describe('SubprocessConverter', () => {
       });
     });
 
-    describe('Editor operations', () => {
+    describe.skip('Editor operations (not in conversion-only ABI)', () => {
       it('should open document for editing', async () => {
         if (!converter?.isReady() || !fs.existsSync(testDocxPath)) return;
 

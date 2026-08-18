@@ -10,8 +10,8 @@ Complete API reference for the LibreOffice WASM Document Converter.
   - [Converter Comparison](#converter-comparison)
   - [Format Validation](#format-validation)
 - [Browser API](#browser-api)
-  - [WorkerBrowserConverter](#workerbrowserconverter)
-  - [BrowserConverter](#browserconverter)
+  - [Worker Browser Converter](#worker-browser-converter)
+  - [Main-thread Browser Converter](#main-thread-browser-converter)
   - [WASM Paths Configuration](#wasm-paths-configuration)
   - [WASM Loading Progress](#wasm-loading-progress)
 - [Document Inspection & Rendering](#document-inspection--rendering)
@@ -56,7 +56,7 @@ const result = await convertDocument(
 
 ---
 
-#### `exportAsImage(input, format?, imageOptions?, converterOptions?)`
+#### `exportAsImage(input, inputFormat, pages, format?, imageOptions?, converterOptions?)`
 
 One-shot image export utility. Creates a converter, exports to image, then destroys it.
 
@@ -64,16 +64,16 @@ One-shot image export utility. Creates a converter, exports to image, then destr
 import { exportAsImage } from '@matbee/libreoffice-converter';
 
 // Export DOCX to PNG
-const pngData = await exportAsImage(docxBuffer, 'png');
+const pngData = await exportAsImage(docxBuffer, 'docx', 0, 'png');
 
 // Export with options
-const highResPng = await exportAsImage(docxBuffer, 'png', {
+const highResPng = await exportAsImage(docxBuffer, 'docx', 0, 'png', {
   dpi: 300,
   width: 1920
 });
 
 // Export presentation to SVG
-const svgData = await exportAsImage(pptxBuffer, 'svg');
+const svgData = await exportAsImage(pptxBuffer, 'pptx', 0, 'svg');
 ```
 
 **Parameters:**
@@ -81,7 +81,9 @@ const svgData = await exportAsImage(pptxBuffer, 'svg');
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `input` | `Uint8Array \| ArrayBuffer \| Buffer` | - | Document data |
-| `format` | `'png' \| 'jpg' \| 'svg'` | `'png'` | Output image format |
+| `inputFormat` | `InputFormat` | - | Explicit input document format |
+| `pages` | `number \| number[]` | - | Zero-based page/slide index or indices |
+| `format` | `'png' \| 'svg'` | `'png'` | Output image format |
 | `imageOptions` | `ImageOptions` | - | Image rendering options |
 | `converterOptions` | `LibreOfficeWasmOptions` | - | Optional converter config |
 
@@ -119,14 +121,14 @@ const converter = await createConverter({
 
 ---
 
-#### `createWorkerConverter(options?)`
+#### `createConverter(options?)`
 
 Creates a converter that runs in a worker thread. **Recommended for servers** as it doesn't block the main thread.
 
 ```typescript
-import { createWorkerConverter } from '@matbee/libreoffice-converter';
+import { createConverter } from '@matbee/libreoffice-converter';
 
-const converter = await createWorkerConverter({
+const converter = await createConverter({
   wasmPath: './wasm',
   verbose: false,
 });
@@ -143,7 +145,7 @@ await converter.destroy();
 | Converter | Thread | Memory | Use Case |
 |-----------|--------|--------|----------|
 | `createConverter()` | Main | Shared | Simple scripts |
-| `createWorkerConverter()` | Worker | Shared | **Servers (recommended)** |
+| `createConverter()` | Conversion facade | Reusable | **Servers (recommended)** |
 
 ---
 
@@ -287,21 +289,20 @@ const outputFormats = LibreOfficeConverter.getSupportedOutputFormats();
 | PPT | `.ppt` | `application/vnd.ms-powerpoint` |
 | ODP | `.odp` | `application/vnd.oasis.opendocument.presentation` |
 | PNG | `.png` | `image/png` |
-| JPG | `.jpg` | `image/jpeg` |
 | SVG | `.svg` | `image/svg+xml` |
 
 ---
 
 ## Browser API
 
-### WorkerBrowserConverter
+### Worker Browser Converter
 
 Runs LibreOffice in a Web Worker, keeping the main thread responsive. **Recommended for browsers.**
 
 ```javascript
-import { WorkerBrowserConverter, createWasmPaths } from '@matbee/libreoffice-converter/browser';
+import { createWorkerBrowserConverter, createWasmPaths } from '@matbee/libreoffice-converter/browser';
 
-const converter = new WorkerBrowserConverter({
+const converter = createWorkerBrowserConverter({
   ...createWasmPaths(), // Defaults to /wasm/
   browserWorkerJs: '/dist/browser.worker.js',
   onProgress: (info) => {
@@ -328,14 +329,14 @@ a.download = result.filename;
 a.click();
 ```
 
-### BrowserConverter
+### Main-thread Browser Converter
 
 Main thread converter (blocks UI during conversion):
 
 ```javascript
-import { BrowserConverter, createWasmPaths } from '@matbee/libreoffice-converter/browser';
+import { createBrowserConverter, createWasmPaths } from '@matbee/libreoffice-converter/browser';
 
-const converter = new BrowserConverter({
+const converter = createBrowserConverter({
   ...createWasmPaths(),
   onProgress: (info) => console.log(`${info.percent}%: ${info.message}`),
 });
@@ -363,7 +364,7 @@ const paths = createWasmPaths();
 const paths = createWasmPaths('https://cdn.example.com/wasm/');
 
 // Or specify each path manually
-const converter = new WorkerBrowserConverter({
+const converter = createWorkerBrowserConverter({
   sofficeJs: 'https://cdn.example.com/wasm/soffice.js',
   sofficeWasm: 'https://cdn.example.com/wasm/soffice.wasm',
   sofficeData: 'https://cdn.example.com/wasm/soffice.data',
@@ -389,7 +390,7 @@ Cross-Origin-Embedder-Policy: require-corp
 ### WASM Loading Progress
 
 ```typescript
-const converter = new WorkerBrowserConverter({
+const converter = createWorkerBrowserConverter({
   ...createWasmPaths('/wasm/'),
   browserWorkerJs: '/dist/browser.worker.js',
   onProgress: (progress) => {
@@ -590,9 +591,9 @@ npm install sharp
 Convert raw RGBA pixel data to PNG format.
 
 ```typescript
-import { createWorkerConverter, rgbaToPng } from '@matbee/libreoffice-converter';
+import { createConverter, rgbaToPng } from '@matbee/libreoffice-converter';
 
-const converter = await createWorkerConverter({ wasmPath: './wasm' });
+const converter = await createConverter({ wasmPath: './wasm' });
 const preview = await converter.renderPage(docBuffer, 'docx', 0, 800);
 
 const pngBuffer = await rgbaToPng(preview.data, preview.width, preview.height);
@@ -719,7 +720,7 @@ type OutputFormat =
   | 'pdf' | 'docx' | 'doc' | 'odt' | 'rtf' | 'txt' | 'html'
   | 'xlsx' | 'xls' | 'ods' | 'csv'
   | 'pptx' | 'ppt' | 'odp'
-  | 'png' | 'jpg' | 'svg';
+  | 'png' | 'svg';
 ```
 
 ---

@@ -4,7 +4,7 @@ import {
   resolveBrowserWasmPaths,
   validateExplicitBrowserWasmPaths,
 } from '../src/browser-runtime-paths.js';
-import { WorkerBrowserConverter } from '../src/browser.js';
+import { createWorkerBrowserConverter } from '../src/browser.js';
 import { createWasmPaths } from '../src/types.js';
 import type { BrowserConverterOptions, BrowserWasmPaths } from '../src/types.js';
 
@@ -112,7 +112,7 @@ describe('browser pthread worker artifact contract', () => {
   });
 
   it('defaults Worker initialization to main-script without a standalone worker URL', async () => {
-    const converter = new WorkerBrowserConverter({ browserWorkerJs: '/browser-worker.js' });
+    const converter = createWorkerBrowserConverter({ browserWorkerJs: '/browser-worker.js' });
 
     await converter.initialize();
 
@@ -122,7 +122,7 @@ describe('browser pthread worker artifact contract', () => {
   });
 
   it('passes an explicitly selected external worker URL', async () => {
-    const converter = new WorkerBrowserConverter({
+    const converter = createWorkerBrowserConverter({
       browserWorkerJs: '/browser-worker.js',
       pthreadWorkerMode: 'external',
       sofficeWorkerJs: '/candidate/soffice.worker.js',
@@ -137,7 +137,7 @@ describe('browser pthread worker artifact contract', () => {
   });
 
   it('declares main-script mode without sending an external worker URL', async () => {
-    const converter = new WorkerBrowserConverter({
+    const converter = createWorkerBrowserConverter({
       browserWorkerJs: '/browser-worker.js',
       sofficeJs: '/candidate/soffice.js',
       sofficeWasm: '/candidate/soffice.wasm',
@@ -153,7 +153,7 @@ describe('browser pthread worker artifact contract', () => {
   });
 
   it('rejects a mixed main-script and external-worker configuration', () => {
-    expect(() => new WorkerBrowserConverter({
+    expect(() => createWorkerBrowserConverter({
       pthreadWorkerMode: 'main-script',
       sofficeWorkerJs: '/borrowed/soffice.worker.js',
     })).toThrow('sofficeWorkerJs must be omitted unless pthreadWorkerMode is explicitly "external"');
@@ -161,7 +161,7 @@ describe('browser pthread worker artifact contract', () => {
   });
 
   it('rejects a legacy worker URL when the mode is omitted', () => {
-    expect(() => new WorkerBrowserConverter({
+    expect(() => createWorkerBrowserConverter({
       sofficeWorkerJs: '/borrowed/soffice.worker.js',
     })).toThrow('sofficeWorkerJs must be omitted unless pthreadWorkerMode is explicitly "external"');
     expect(CapturingWorker.instances).toHaveLength(0);
@@ -172,7 +172,7 @@ describe('browser pthread worker artifact contract', () => {
     ['empty', ''],
     ['blank', '   '],
   ])('rejects an explicit external mode with a %s worker URL', (_label, sofficeWorkerJs) => {
-    expect(() => new WorkerBrowserConverter({
+    expect(() => createWorkerBrowserConverter({
       pthreadWorkerMode: 'external',
       sofficeWorkerJs,
     })).toThrow('sofficeWorkerJs must be a non-empty URL');
@@ -184,7 +184,7 @@ describe('browser pthread worker artifact contract', () => {
       pthreadWorkerMode: mode,
     } as unknown as BrowserConverterOptions;
 
-    expect(() => new WorkerBrowserConverter(options)).toThrow('unsupported pthreadWorkerMode');
+    expect(() => createWorkerBrowserConverter(options)).toThrow('unsupported pthreadWorkerMode');
     expect(CapturingWorker.instances).toHaveLength(0);
   });
 

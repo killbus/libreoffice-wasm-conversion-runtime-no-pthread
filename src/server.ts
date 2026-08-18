@@ -1,15 +1,15 @@
 /**
  * LibreOffice WASM Document Converter - Server/Node.js Entry Point
  *
- * This entry point exports all Node.js-specific converters and utilities.
+ * This entry point exports the conversion-only Node.js surface and utilities.
  * Use this for server-side code (API routes, server components, etc.)
  *
  * @example
  * ```typescript
  * // In Next.js API routes or server components
- * import { WorkerConverter, createWorkerConverter } from '@killbus/libreoffice-converter/server';
+ * import { createConverter } from '@killbus/libreoffice-converter/server';
  *
- * const converter = await createWorkerConverter({ wasmPath: './wasm' });
+ * const converter = await createConverter({ wasmPath: './wasm' });
  * const result = await converter.convert(docxBuffer, { outputFormat: 'pdf' });
  * ```
  *
@@ -17,12 +17,8 @@
  */
 
 // ============================================
-// Converter Classes (Node.js only)
+// Conversion-only Node.js surface
 // ============================================
-
-export { LibreOfficeConverter } from './converter-node.js';
-export { WorkerConverter, createWorkerConverter } from './node.worker-converter.js';
-export { SubprocessConverter, createSubprocessConverter } from './subprocess.worker-converter.js';
 
 // Font loading utilities (Node.js)
 export { loadFontsFromZip, loadFontsFromDirectory, loadSystemFonts, loadFontsFromPackage, loadFontsFromPackages } from './font-loader.js';
@@ -47,18 +43,19 @@ export type { ImageEncodeOptions } from './image-utils.js';
 
 import { LibreOfficeConverter } from './converter-node.js';
 import { createSubprocessConverter } from './subprocess.worker-converter.js';
+import { exposeConversionOnly } from './conversion-only.js';
 import { resolveSingleResultFilterOptions } from './types.js';
-import type { ConversionOptions, ConversionResult, LibreOfficeWasmOptions } from './types.js';
+import type { ConversionOptions, ConversionResult, ILibreOfficeConverter, LibreOfficeWasmOptions } from './types.js';
 
 /**
  * Create a configured LibreOffice converter instance
  */
 export async function createConverter(
   options?: LibreOfficeWasmOptions
-): Promise<LibreOfficeConverter> {
+): Promise<ILibreOfficeConverter> {
   const converter = new LibreOfficeConverter(options);
   await converter.initialize();
-  return converter;
+  return exposeConversionOnly(converter);
 }
 
 /**
@@ -98,17 +95,6 @@ export type {
   WasmLoadPhase,
   WasmLoadProgress,
   ILibreOfficeConverter,
-  InputFormatOptions,
-  PagePreview,
-  FullQualityPagePreview,
-  RenderOptions,
-  FullQualityRenderOptions,
-  DocumentInfo,
-  EditorSession,
-  EditorOperationResult,
-  EmscriptenModule,
-  EmscriptenFS,
-  WasmLoaderModule,
 } from './types.js';
 
 export {
@@ -122,109 +108,6 @@ export {
   getConversionErrorMessage,
   INPUT_FORMAT_CATEGORY,
   CATEGORY_OUTPUT_FORMATS,
-  LOKDocumentType,
-  LOK_DOCTYPE_OUTPUT_FORMATS,
-  getOutputFormatsForDocType,
   createWasmPaths,
   DEFAULT_WASM_BASE_URL,
 } from './types.js';
-
-// ============================================
-// LOK constants for advanced usage
-// ============================================
-
-export {
-  LOK_MOUSEEVENT_BUTTONDOWN,
-  LOK_MOUSEEVENT_BUTTONUP,
-  LOK_MOUSEEVENT_MOVE,
-  LOK_KEYEVENT_KEYINPUT,
-  LOK_KEYEVENT_KEYUP,
-  LOK_SELTYPE_NONE,
-  LOK_SELTYPE_TEXT,
-  LOK_SELTYPE_CELL,
-  LOK_SETTEXTSELECTION_START,
-  LOK_SETTEXTSELECTION_END,
-  LOK_SETTEXTSELECTION_RESET,
-  LOK_DOCTYPE_TEXT,
-  LOK_DOCTYPE_SPREADSHEET,
-  LOK_DOCTYPE_PRESENTATION,
-  LOK_DOCTYPE_DRAWING,
-  LOK_DOCTYPE_OTHER,
-} from './lok-bindings.js';
-
-// ============================================
-// Editor API
-// ============================================
-
-export {
-  createEditor,
-  isWriterEditor,
-  isCalcEditor,
-  isImpressEditor,
-  isDrawEditor,
-  OfficeEditor,
-  WriterEditor,
-  CalcEditor,
-  ImpressEditor,
-  DrawEditor,
-  allTools,
-  toolsByName,
-  commonTools,
-  writerTools,
-  calcTools,
-  impressTools,
-  drawTools,
-  documentTools,
-  getToolsForDocumentType,
-  toOpenAIFunction,
-  toAnthropicTool,
-  getOpenAIFunctions,
-  getAnthropicTools,
-} from './editor/index.js';
-
-export type {
-  OperationResult,
-  TruncationInfo,
-  OpenDocumentOptions,
-  TextPosition,
-  TextRange,
-  TextFormat,
-  Paragraph,
-  WriterStructure,
-  CellRef,
-  RangeRef,
-  ColRef,
-  SheetRef,
-  CellValue,
-  CellData,
-  CellFormat,
-  SheetInfo,
-  CalcStructure,
-  SlideLayout,
-  TextFrame,
-  SlideData,
-  SlideInfo,
-  ImpressStructure,
-  ShapeType,
-  ShapeData,
-  PageData,
-  PageInfo,
-  DrawStructure,
-  Rectangle,
-  Size,
-  Position,
-  DocumentMetadata,
-  DocumentStructure,
-  DocumentType,
-  SelectionRange,
-  FindOptions,
-  ToolDefinition,
-  CommonToolName,
-  WriterToolName,
-  CalcToolName,
-  ImpressToolName,
-  DrawToolName,
-  DocumentToolName,
-  AllToolName,
-  ToolParameters,
-} from './editor/index.js';

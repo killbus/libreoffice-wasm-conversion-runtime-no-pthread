@@ -3,7 +3,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  expectedLokExports,
   findMissingGlueBindings,
+  findLokExportDrift,
   verifyNativePackageAssets,
 } from '../scripts/verify-native-package-assets.mjs';
 
@@ -28,10 +30,7 @@ describe('native package asset gate', () => {
       'wasm/soffice.js',
       'wasm/soffice.wasm',
     ]);
-    expect(report.requiredNativeExports).toEqual([
-      'lok_convertDocument',
-      'lok_convertFree',
-    ]);
+    expect(report.expectedLokExports).toEqual(expectedLokExports);
   });
 
   it('fails closed before packaging when a native asset is stale', async () => {
@@ -50,5 +49,20 @@ describe('native package asset gate', () => {
     expect(
       findMissingGlueBindings('Module["_lok_convertDocument"];'),
     ).toEqual(['_lok_convertFree']);
+  });
+
+  it('rejects missing and extra LibreOfficeKit exports', () => {
+    expect(findLokExportDrift(expectedLokExports)).toEqual({
+      actual: [...expectedLokExports].sort(),
+      missing: [],
+      extra: [],
+    });
+    expect(findLokExportDrift([
+      ...expectedLokExports.filter((name) => name !== 'lok_documentSaveAs'),
+      'lok_documentPaintTile',
+    ])).toMatchObject({
+      missing: ['lok_documentSaveAs'],
+      extra: ['lok_documentPaintTile'],
+    });
   });
 });
