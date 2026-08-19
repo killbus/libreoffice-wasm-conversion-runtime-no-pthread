@@ -33,11 +33,11 @@ describe('LFS-free CI runtime source', () => {
     );
   });
 
-  it('pins the independently verified draft asset by ID, size, and SHA-256', () => {
+  it('pins the publicly qualified asset by ID, size, and SHA-256', () => {
     expect(runtimeSource).toMatchObject({
       candidateQualified: true,
-      releaseQualified: false,
-      draft: true,
+      releaseQualified: true,
+      draft: false,
       releaseId: '372605136',
       releaseAssetId: '519905261',
       releaseAssetBytes: 248884128,
