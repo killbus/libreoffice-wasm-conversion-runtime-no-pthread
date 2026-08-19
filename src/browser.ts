@@ -471,8 +471,12 @@ class BrowserConverter {
           this.quarantineRuntime();
           if (conversionFailed) {
             const annotatedError = attachCleanupUncertainty(primaryError, cleanupError);
+            // Cleanup uncertainty intentionally supersedes a non-Error primary failure.
+            // eslint-disable-next-line no-unsafe-finally
             if (!(primaryError instanceof Error)) throw annotatedError;
           } else {
+            // A successful conversion must not escape an uncertain CSV cleanup.
+            // eslint-disable-next-line no-unsafe-finally
             throw cleanupError;
           }
         }
