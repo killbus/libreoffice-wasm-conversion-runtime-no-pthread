@@ -123,12 +123,12 @@
 <span class="k">import</span> { WorkerBrowserConverter, createWasmPaths } <span class="k">from</span> '@matbee/libreoffice-converter/browser';
 
 <span class="c">// A Worker script can't be loaded cross-origin, so keep the small JS glue</span>
-<span class="c">// (dist/ + soffice.js + soffice.worker.js) same-origin and load only the</span>
+<span class="c">// (dist/ + soffice.js) same-origin and load only the</span>
 <span class="c">// two heavy binaries from this CDN.</span>
 <span class="k">const</span> CDN = '__ORIGIN__';
 
 <span class="k">const</span> converter = <span class="k">new</span> WorkerBrowserConverter({
-  ...createWasmPaths('/wasm/'),               <span class="c">// soffice.js + soffice.worker.js: same-origin</span>
+  ...createWasmPaths('/wasm/'),               <span class="c">// main-script pthread glue: same-origin</span>
   sofficeWasm: `${CDN}/wasm/soffice.wasm`,     <span class="c">// ≈140 MB from the CDN</span>
   sofficeData: `${CDN}/wasm/soffice.data`,     <span class="c">// ≈95 MB from the CDN</span>
 });
@@ -146,7 +146,6 @@
 			<li><a href="./wasm/soffice.js">wasm/soffice.js</a><span class="size">loader</span></li>
 			<li><a href="./wasm/soffice.wasm">wasm/soffice.wasm</a><span class="size">≈140 MB</span></li>
 			<li><a href="./wasm/soffice.data">wasm/soffice.data</a><span class="size">≈95 MB</span></li>
-			<li><a href="./wasm/soffice.worker.js">wasm/soffice.worker.js</a><span class="size">pthread</span></li>
 		</ul>
 	</section>
 

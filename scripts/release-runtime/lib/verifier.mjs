@@ -9,7 +9,7 @@ import { resolve } from 'node:path'
 import {
   CANDIDATE_MANIFEST_FILE,
   ASSET_SHA256SUMS_FILE,
-  FORBIDDEN_WORKER_FILE,
+  isForbiddenWorkerPath,
   RUNTIME_TAG_PREFIX,
 } from './constants.mjs'
 import {
@@ -71,11 +71,7 @@ export async function verifyArchive(options) {
   )
 
   // 4. No worker (bare or under any directory), and the exact inventory.
-  if (
-    extractedPaths.some(
-      (path) => path === FORBIDDEN_WORKER_FILE || path.endsWith(`/${FORBIDDEN_WORKER_FILE}`)
-    )
-  ) {
+  if (extractedPaths.some(isForbiddenWorkerPath)) {
     throw new VerifyError('archive contains a forbidden standalone worker')
   }
   const expectedInventory = new Set([

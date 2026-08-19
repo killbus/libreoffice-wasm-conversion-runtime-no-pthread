@@ -45,10 +45,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350 # GHA 6h cap is 360; leave a margin
     steps:
-      - name: Checkout (with LFS)
+      - name: Checkout (without obsolete LFS runtime bytes)
         uses: actions/checkout@v4
         with:
-          lfs: true
+          # The checked-in native assets are deleted before the clean build.
+          # Avoid consuming LFS bandwidth for bytes this workflow never uses.
+          lfs: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -78,7 +80,7 @@ jobs:
             ca-certificates xz-utils
 
       - name: Build TypeScript (dist for subprocess worker)
-        run: npm run build
+        run: node scripts/build-js-bundles.mjs
 
       - name: Configure build mode
         id: mode
@@ -153,8 +155,6 @@ jobs:
             wasm/soffice.data
             wasm/soffice.cjs
             wasm/soffice.js
-            wasm/soffice.worker.cjs
-            wasm/soffice.worker.js
             wasm/soffice.data.js.metadata
           retention-days: 14
           if-no-files-found: warn

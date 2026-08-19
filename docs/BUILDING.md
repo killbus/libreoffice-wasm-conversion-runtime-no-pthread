@@ -269,11 +269,15 @@ mkdir -p /path/to/project/wasm
 
 # Copy files
 cp instdir/program/soffice.wasm /path/to/project/wasm/
+cp instdir/program/soffice.js /path/to/project/wasm/soffice.js
 cp instdir/program/soffice.js /path/to/project/wasm/soffice.cjs
 cp instdir/program/soffice.data /path/to/project/wasm/
-cp instdir/program/soffice.worker.js /path/to/project/wasm/soffice.worker.cjs
-cp instdir/program/soffice.data.js.metadata /path/to/project/wasm/
 ```
+
+The current frozen browser profile uses main-script pthread bootstrap:
+`soffice.js` is supplied through `Module.mainScriptUrlOrBlob`. Do not copy or
+publish a standalone `soffice.worker.js`; a build that requires one is a
+different artifact profile and must receive a separate candidate identity.
 
 ### Step 8: Apply Node.js Patches
 
@@ -284,9 +288,6 @@ cd /path/to/project/wasm
 
 # Patch 1: Make soffice.cjs use global.Module
 sed -i '1s/^/if(typeof global!=="undefined"){var Module=global.Module=global.Module||{}}\n/' soffice.cjs
-
-# Patch 2: Update worker reference to .cjs
-sed -i 's/soffice\.worker\.js/soffice.worker.cjs/g' soffice.cjs
 ```
 
 ---
@@ -379,16 +380,14 @@ sudo swapon /swapfile
 
 **Solution:** Add "FS" to EXPORTED_RUNTIME_METHODS in EMSCRIPTEN_INTEL_GCC.mk.
 
-### Worker file not loading in Node.js
+### Glue requests `soffice.worker.js`
 
-**Cause:** Package.json has `"type": "module"` but worker is CommonJS.
+**Cause:** The glue belongs to an external-worker artifact profile, not the
+current main-script profile.
 
-**Solution:** Rename worker to `.cjs`:
-
-```bash
-cp soffice.worker.js soffice.worker.cjs
-sed -i 's/soffice\.worker\.js/soffice.worker.cjs/g' soffice.cjs
-```
+**Solution:** Do not rename, synthesize, or fall back to a worker file. Rebuild
+the intended main-script profile and qualify the changed bytes under a new
+candidate identity, or define external-worker mode as a separate frozen profile.
 
 ### Module blocks event loop
 
@@ -450,11 +449,10 @@ After a successful build, you'll have:
 
 | File | Size (approx) | Description |
 |------|---------------|-------------|
-| `soffice.wasm` | 110MB | Main WASM binary |
-| `soffice.cjs` | 230KB | JavaScript glue code |
-| `soffice.data` | 80MB | Virtual filesystem |
-| `soffice.worker.cjs` | 4KB | Web Worker script |
-| `soffice.data.js.metadata` | 150KB | Filesystem metadata |
+| `soffice.wasm` | 148MB | Main WASM binary |
+| `soffice.js` | 440KB | Browser main-script pthread glue |
+| `soffice.cjs` | 440KB | Node.js glue code |
+| `soffice.data` | 100MB | Virtual filesystem |
 
 **Compressed sizes (gzip -9):**
 
@@ -518,4 +516,3 @@ docker build -t libreoffice-wasm-builder .
 docker run -v $(pwd)/wasm:/output libreoffice-wasm-builder \
     cp -r /build/wasm/* /output/
 ```
-

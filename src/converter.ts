@@ -36,6 +36,7 @@ import {
   InputFormat,
   getOutputFormatsForDocType,
   buildLoadOptions,
+  resolveSingleResultFilterOptions,
 } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
 import { terminateExportedPThreads } from './emscripten-pthread.js';
@@ -46,6 +47,13 @@ import {
   createNativeConversionRequest,
   runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
+import {
+  ConversionCleanupUncertaintyError,
+  attachCleanupUncertainty,
+  beginCsvConversionTransaction,
+  finishCsvConversionTransaction,
+  readExactConvertedOutput,
+} from './conversion-output.js';
 
 // Declare the module factory type
 type ModuleFactory = (config: Partial<EmscriptenModule>) => Promise<EmscriptenModule>;
@@ -460,6 +468,11 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     // Check if we need to reinitialize due to previous corruption
     if (this.corrupted) {
       await this.reinitialize();
@@ -502,6 +515,23 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
 
     const inputPath = `/tmp/input/doc.${inputExt}`;
     const outputPath = `/tmp/output/doc.${outputExt}`;
+    let csvTransaction;
+    try {
+      csvTransaction = beginCsvConversionTransaction(
+        this.module.FS,
+        inputPath,
+        outputPath,
+        outputExt
+      );
+    } catch (error) {
+      this.quarantineRuntime();
+      throw error;
+    }
+    const effectiveOptions = effectiveFilterOptions === options.filterOptions
+      ? options
+      : { ...options, filterOptions: effectiveFilterOptions };
+    let primaryError: unknown;
+    let conversionFailed = false;
 
     try {
       this.emitProgress('converting', 10, 'Writing input document...');
@@ -516,7 +546,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         inputPath,
         outputPath,
         inputExt,
-        options
+        effectiveOptions
       );
 
       this.emitProgress('complete', 100, 'Conversion complete');
@@ -531,6 +561,8 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         duration: Date.now() - startTime,
       };
     } catch (error) {
+      conversionFailed = true;
+      primaryError = error;
       // Check if this error indicates corruption
       if (error instanceof Error && this.isCorruptionError(error)) {
         this.corrupted = true;
@@ -540,23 +572,43 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       }
       throw error;
     } finally {
-      // Cleanup temporary files
-      try {
-        this.module?.FS.unlink(inputPath);
-      } catch {
-        // Ignore
-      }
-      try {
-        this.module?.FS.unlink(outputPath);
-      } catch {
-        // Ignore
+      if (csvTransaction) {
+        try {
+          finishCsvConversionTransaction(csvTransaction);
+        } catch (error) {
+          const cleanupError = error instanceof ConversionCleanupUncertaintyError
+            ? error
+            : new ConversionCleanupUncertaintyError([String(error)]);
+          this.quarantineRuntime();
+          if (conversionFailed) {
+            const annotatedError = attachCleanupUncertainty(primaryError, cleanupError);
+            // Cleanup uncertainty intentionally supersedes a non-Error primary failure.
+            // eslint-disable-next-line no-unsafe-finally
+            if (!(primaryError instanceof Error)) throw annotatedError;
+          } else {
+            // A successful conversion must not escape an uncertain CSV cleanup.
+            // eslint-disable-next-line no-unsafe-finally
+            throw cleanupError;
+          }
+        }
+      } else {
+        // Legacy non-CSV cleanup remains best-effort.
+        try {
+          this.module?.FS.unlink(inputPath);
+        } catch {
+          // Ignore
+        }
+        try {
+          this.module?.FS.unlink(outputPath);
+        } catch {
+          // Ignore
+        }
       }
     }
   }
 
   /**
-   * Perform a basic conversion through the official hidden native bridge.
-   * Pointer-based image export remains on the legacy path below.
+   * Perform a conversion through the official hidden native bridge.
    */
   private async performConversion(
     inputPath: string,
@@ -564,7 +616,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     inputFormat: string,
     options: ConversionOptions
   ): Promise<Uint8Array> {
-    if (['png', 'jpg', 'svg'].includes(options.outputFormat)) {
+    if (options.outputFormat === 'png' || options.outputFormat === 'svg') {
       return this.performLegacyImageConversion(
         inputPath,
         outputPath,
@@ -615,24 +667,7 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
     }
 
     this.emitProgress('converting', 90, 'Reading output...');
-    try {
-      const outputData = module.FS.readFile(outputPath) as Uint8Array;
-      if (outputData.length === 0) {
-        throw new ConversionError(
-          ConversionErrorCode.CONVERSION_FAILED,
-          'Conversion produced empty output'
-        );
-      }
-      return outputData;
-    } catch (error) {
-      if (error instanceof ConversionError) {
-        throw error;
-      }
-      throw new ConversionError(
-        ConversionErrorCode.CONVERSION_FAILED,
-        `Failed to read converted file: ${String(error)}`
-      );
-    }
+    return readExactConvertedOutput(module.FS, outputPath);
   }
 
   /**
@@ -698,8 +733,8 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
         filterOptions = buildPdfFilterOptions(options.pdf) || filterOptions;
       }
 
-      // Add page selection for image exports (png, jpg, svg)
-      if (['png', 'jpg', 'svg'].includes(options.outputFormat) && options.image?.pageIndex !== undefined) {
+      // Add page selection for image exports.
+      if (options.image?.pageIndex !== undefined) {
         // PageRange is 1-indexed
         const pageNum = options.image.pageIndex + 1;
         if (filterOptions) {

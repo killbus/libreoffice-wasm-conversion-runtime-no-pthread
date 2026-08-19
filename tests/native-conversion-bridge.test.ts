@@ -9,6 +9,7 @@ import {
   normalizeLibreOfficeUrl,
   resolveLibreOfficeExportFilter,
 } from '../src/native-conversion-bridge.js';
+import { ConversionErrorCode, FORMAT_FILTER_OPTIONS } from '../src/types.js';
 
 describe('native conversion bridge contract', () => {
   it.each([
@@ -56,6 +57,42 @@ describe('native conversion bridge contract', () => {
     );
     expect(request.outputFilter).toBe('calc_pdf_Export');
   });
+
+  it('builds CSV export requests with the same singular effective option', () => {
+    const defaultRequest = createNativeConversionRequest({
+      inputPath: '/tmp/input/document.xlsx',
+      outputPath: '/tmp/output/document.csv',
+      inputFormat: 'xlsx',
+      outputFormat: 'csv',
+    });
+    const custom = '59,39,76,1,,1033,true,false,true,true,true,0,true,true,false';
+    const customRequest = createNativeConversionRequest({
+      inputPath: '/tmp/input/document.xlsx',
+      outputPath: '/tmp/output/document.csv',
+      inputFormat: 'xlsx',
+      outputFormat: 'csv',
+      filterOptions: custom,
+    });
+
+    expect(defaultRequest.outputFilterOptions).toBe(FORMAT_FILTER_OPTIONS.csv);
+    expect(customRequest.outputFilterOptions).toBe(custom);
+    expect(customRequest.filterData).toEqual({});
+  });
+
+  it.each(['-1', '1', '-2', 'sheet'])(
+    'rejects CSV sheet token %j while keeping the runtime reusable',
+    (sheetToken) => {
+      expect(() => createNativeConversionRequest({
+        inputPath: '/tmp/input/document.xlsx',
+        outputPath: '/tmp/output/document.csv',
+        inputFormat: 'xlsx',
+        outputFormat: 'csv',
+        filterOptions: `44,34,76,1,,0,false,true,false,false,false,${sheetToken}`,
+      })).toThrowError(expect.objectContaining({
+        code: ConversionErrorCode.INVALID_INPUT,
+      }));
+    }
+  );
 
   it('separates JSON FilterData from string FilterOptions', () => {
     const filterData = {

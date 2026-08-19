@@ -461,6 +461,19 @@ if [ ! -f "${ARTIFACT_DIR}/soffice.data" ]; then
     exit 1
 fi
 
+# This build entry point packages only the frozen main-script pthread profile.
+# Bootstrap mode comes from the glue bytes, never from the presence of an
+# optional sidecar file. External-worker glue requires a separate profile,
+# inventory, and candidate identity.
+if ! grep -qF 'mainScriptUrlOrBlob' "${ARTIFACT_DIR}/soffice.js"; then
+    log_error "soffice.js is not main-script pthread glue (mainScriptUrlOrBlob missing)."
+    exit 1
+fi
+if grep -qF 'soffice.worker.js' "${ARTIFACT_DIR}/soffice.js"; then
+    log_error "soffice.js requests a standalone worker; external-worker artifacts are not accepted by this profile."
+    exit 1
+fi
+
 # Remove prior outputs so packaging never ships a mix of old and new files
 log_info "Clearing previous outputs in ${OUTPUT_DIR}..."
 rm -f "${OUTPUT_DIR}/soffice.wasm" \
@@ -477,9 +490,6 @@ cp "${ARTIFACT_DIR}/soffice.js"   "${OUTPUT_DIR}/soffice.cjs"
 cp "${ARTIFACT_DIR}/soffice.data" "${OUTPUT_DIR}/soffice.data"
 if [ -f "${ARTIFACT_DIR}/soffice.data.js.metadata" ]; then
     cp "${ARTIFACT_DIR}/soffice.data.js.metadata" "${OUTPUT_DIR}/"
-fi
-if [ -f "${ARTIFACT_DIR}/soffice.worker.js" ]; then
-    cp "${ARTIFACT_DIR}/soffice.worker.js" "${OUTPUT_DIR}/soffice.worker.cjs"
 fi
 log_success "Copied WASM artifacts"
 
@@ -519,9 +529,6 @@ sed -i 's|datafile_[^"]*emscripten_fs_image/soffice\.data|datafile_soffice.data|
 
 # 4. Browser copy (same classic body)
 cp soffice.cjs soffice.js
-if [ -f "soffice.worker.cjs" ]; then
-    cp soffice.worker.cjs soffice.worker.js
-fi
 log_success "Created browser copies"
 
 for req in soffice.wasm soffice.data soffice.cjs soffice.js; do
@@ -530,6 +537,11 @@ for req in soffice.wasm soffice.data soffice.cjs soffice.js; do
         exit 1
     fi
 done
+
+if find "${OUTPUT_DIR}" -type f \( -name 'soffice.worker.js' -o -name 'soffice.worker.cjs' \) -print -quit | grep -q .; then
+    log_error "Packaging contract violation: standalone pthread worker present in main-script output."
+    exit 1
+fi
 
 cd "${LO_DIR}"
 

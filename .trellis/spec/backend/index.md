@@ -20,6 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [WASM Patch Stack](./wasm-patch-stack.md) | Cached source reset and strict reviewed-patch replay | Active |
+| [Conversion Output Contract](./conversion-output-contract.md) | Singular output freshness, cleanup, quarantine, and failure preservation | Active |
 
 ---
 

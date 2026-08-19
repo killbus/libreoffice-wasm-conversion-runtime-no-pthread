@@ -3,24 +3,26 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  expectedLokExports,
   findMissingGlueBindings,
+  findLokExportDrift,
   verifyNativePackageAssets,
 } from '../scripts/verify-native-package-assets.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const candidateSpec = JSON.parse(
   readFileSync(
-    resolve(root, 'scripts/release-runtime/candidate-spec.json'),
+    resolve(root, 'scripts/release-runtime/qualified-candidate-spec.json'),
     'utf8',
   ),
 );
 
 describe('native package asset gate', () => {
-  it('binds the package bytes and glue to the frozen native bridge candidate', async () => {
+  it('binds the package bytes and glue to the qualified successor candidate', async () => {
     const report = await verifyNativePackageAssets({ root, spec: candidateSpec });
 
     expect(report.candidateId).toBe(
-      '21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b',
+      '70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68',
     );
     expect(report.assets.map((asset) => asset.path)).toEqual([
       'wasm/soffice.cjs',
@@ -28,10 +30,7 @@ describe('native package asset gate', () => {
       'wasm/soffice.js',
       'wasm/soffice.wasm',
     ]);
-    expect(report.requiredNativeExports).toEqual([
-      'lok_convertDocument',
-      'lok_convertFree',
-    ]);
+    expect(report.expectedLokExports).toEqual(expectedLokExports);
   });
 
   it('fails closed before packaging when a native asset is stale', async () => {
@@ -50,5 +49,20 @@ describe('native package asset gate', () => {
     expect(
       findMissingGlueBindings('Module["_lok_convertDocument"];'),
     ).toEqual(['_lok_convertFree']);
+  });
+
+  it('rejects missing and extra LibreOfficeKit exports', () => {
+    expect(findLokExportDrift(expectedLokExports)).toEqual({
+      actual: [...expectedLokExports].sort(),
+      missing: [],
+      extra: [],
+    });
+    expect(findLokExportDrift([
+      ...expectedLokExports.filter((name) => name !== 'lok_documentSaveAs'),
+      'lok_documentPaintTile',
+    ])).toMatchObject({
+      missing: ['lok_documentSaveAs'],
+      extra: ['lok_documentPaintTile'],
+    });
   });
 });

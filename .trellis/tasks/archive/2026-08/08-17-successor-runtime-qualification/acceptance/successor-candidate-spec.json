@@ -1,0 +1,104 @@
+{
+  "kind": "libreoffice-wasm-runtime-frozen-spec",
+  "schemaVersion": 1,
+  "candidateId": "70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68",
+  "provenance": {
+    "native": {
+      "commit": "0f583b66570bcecb9562220e0df1d823eb010362",
+      "githubActionsRunId": "32146386224",
+      "abi": "lok-convert-document-v1",
+      "schemaVersion": 1
+    },
+    "wrapper": {
+      "commit": "0f583b66570bcecb9562220e0df1d823eb010362"
+    }
+  },
+  "runtime": {
+    "pthreadWorkerMode": "main-script",
+    "externalWorker": null
+  },
+  "originalNativeArchive": {
+    "name": "soffice-wasm-conversion-only-32146386224.zip",
+    "bytes": 78834449,
+    "sha256": "8b6b6e75caad9a136b00807d2bb807d9dccb87e21354d5f4ffc539a09fbd1e87"
+  },
+  "assets": [
+    {
+      "path": "dist/browser.d.ts",
+      "role": "browserTypes",
+      "mimeType": "text/plain",
+      "bytes": 17148,
+      "sha256": "e0069bbd809b98f19a7f52716623f767741087649f2981ba4204ce25f97d2613",
+      "sourceRoot": "wrapper",
+      "sourcePath": "dist/browser.d.ts"
+    },
+    {
+      "path": "dist/browser.js",
+      "role": "browserModule",
+      "mimeType": "text/javascript",
+      "bytes": 91950,
+      "sha256": "34c5788bbbb4ba35fdb61f0aecd302cfc6cdb041db69c4075c9aeb7b37827b39",
+      "sourceRoot": "wrapper",
+      "sourcePath": "dist/browser.js"
+    },
+    {
+      "path": "dist/browser.worker.global.js",
+      "role": "browserWorker",
+      "mimeType": "text/javascript",
+      "bytes": 122981,
+      "sha256": "9200526edcef7eb1f06bb7c626bbd48e9dbb1f2c87748df96ce9f4baf5944a6f",
+      "sourceRoot": "wrapper",
+      "sourcePath": "dist/browser.worker.global.js"
+    },
+    {
+      "path": "wasm/loader.cjs",
+      "role": "nodeLoader",
+      "mimeType": "text/javascript",
+      "bytes": 10730,
+      "sha256": "e1abffbccc38db8e19d4aa2176b65e16a6cad0311cb2aae6973efaa083532aad",
+      "sourceRoot": "wrapper",
+      "sourcePath": "wasm/loader.cjs"
+    },
+    {
+      "path": "wasm/soffice.cjs",
+      "role": "nodeGlue",
+      "mimeType": "text/javascript",
+      "bytes": 439517,
+      "sha256": "0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5",
+      "sourceRoot": "native",
+      "sourcePath": "soffice.cjs"
+    },
+    {
+      "path": "wasm/soffice.data",
+      "role": "filesystemData",
+      "mimeType": "application/octet-stream",
+      "bytes": 99735790,
+      "sha256": "b0c2aed2225f7e8e08b0e4dcbcbb9c0fd26cb1b6d30224d6ba2d680132694884",
+      "sourceRoot": "native",
+      "sourcePath": "soffice.data"
+    },
+    {
+      "path": "wasm/soffice.js",
+      "role": "browserGlue",
+      "mimeType": "text/javascript",
+      "bytes": 439517,
+      "sha256": "0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5",
+      "sourceRoot": "native",
+      "sourcePath": "soffice.js"
+    },
+    {
+      "path": "wasm/soffice.wasm",
+      "role": "wasmBinary",
+      "mimeType": "application/wasm",
+      "bytes": 148022311,
+      "sha256": "3830a7479d609f40be5f0af5495c5925c57f67072a9bf2f64d08df82a2e44944",
+      "sourceRoot": "native",
+      "sourcePath": "soffice.wasm"
+    }
+  ],
+  "controlFiles": [
+    "CANDIDATE-MANIFEST.json",
+    "ASSET-SHA256SUMS"
+  ],
+  "expectedPayloadArchiveName": "libreoffice-wasm-runtime-70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68.zip"
+}

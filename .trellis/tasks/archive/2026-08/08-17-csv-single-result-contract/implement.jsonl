@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "CSV options cross public, worker, native, and VFS boundaries."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use one shared validator instead of divergent entry-point parsing."}
+{"file": ".trellis/tasks/08-17-csv-single-result-contract/research/source-facts.md", "reason": "Authoritative LibreOffice and wrapper semantics for the fix."}

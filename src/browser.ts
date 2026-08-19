@@ -24,8 +24,7 @@ export type {
   ProgressInfo,
   WasmLoadPhase,
   WasmLoadProgress,
-  EmscriptenModule,
-  EmscriptenFS,
+  ILibreOfficeConverter,
 } from './types.js';
 
 export {
@@ -41,30 +40,6 @@ export {
 // Font loading utilities (browser-compatible)
 export { loadFontsFromUrl } from './font-loader.browser.js';
 
-// Export editor API
-export {
-  createEditor,
-  isWriterEditor,
-  isCalcEditor,
-  isImpressEditor,
-  isDrawEditor,
-  OfficeEditor,
-  WriterEditor,
-  CalcEditor,
-  ImpressEditor,
-  DrawEditor,
-} from './editor/index.js';
-
-export type {
-  OperationResult,
-  OpenDocumentOptions,
-  DocumentStructure,
-  WriterStructure,
-  CalcStructure,
-  ImpressStructure,
-  DrawStructure,
-} from './editor/types.js';
-
 import {
   ConversionError,
   ConversionErrorCode,
@@ -75,6 +50,7 @@ import {
   FORMAT_MIME_TYPES,
   FORMAT_FILTER_OPTIONS,
   buildPdfFilterOptions,
+  resolveSingleResultFilterOptions,
   OUTPUT_FORMAT_TO_LOK,
   BrowserConverterOptions,
   WorkerBrowserConverterOptions,
@@ -100,6 +76,7 @@ import {
   locateBrowserRuntimeFile,
   resolveBrowserWasmPaths,
 } from './browser-runtime-paths.js';
+import { exposeConversionOnly } from './conversion-only.js';
 import { LOKBindings } from './lok-bindings.js';
 import {
   NativeConversionError,
@@ -107,6 +84,13 @@ import {
   createNativeConversionRequest,
   runNativeConversionWhenReady,
 } from './native-conversion-bridge.js';
+import {
+  ConversionCleanupUncertaintyError,
+  attachCleanupUncertainty,
+  beginCsvConversionTransaction,
+  finishCsvConversionTransaction,
+  readExactConvertedOutput,
+} from './conversion-output.js';
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OpenDocumentOptions } from './editor/types.js';
 import { terminateExportedPThreads } from './emscripten-pthread.js';
@@ -164,7 +148,7 @@ interface WorkerResponse {
  * on the main thread and can return editor objects directly. Use WorkerBrowserConverter
  * for the standard session-based API.
  */
-export class BrowserConverter {
+class BrowserConverter {
   private module: EmscriptenModule | null = null;
   private _lokInstance: number = 0;
   private lokBindings: LOKBindings | null = null;
@@ -346,6 +330,11 @@ export class BrowserConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if (this.corrupted) {
       throw new ConversionError(
         ConversionErrorCode.WASM_NOT_INITIALIZED,
@@ -372,14 +361,27 @@ export class BrowserConverter {
 
     const inPath = `/tmp/input/doc.${ext}`;
     const outPath = `/tmp/output/doc.${outputExt}`;
-    const isImageFormat = ['png', 'jpg', 'svg'].includes(outputExt);
+    let csvTransaction;
+    try {
+      csvTransaction = beginCsvConversionTransaction(
+        this.module.FS,
+        inPath,
+        outPath,
+        outputExt
+      );
+    } catch (error) {
+      this.quarantineRuntime();
+      throw error;
+    }
+    const isImageFormat = outputExt === 'png' || outputExt === 'svg';
     let docPtr = 0;
+    let primaryError: unknown;
+    let conversionFailed = false;
 
     try {
       this.module.FS.writeFile(inPath, inputData);
 
       if (isImageFormat) {
-        // Rendering/image export intentionally keeps the live document-pointer path.
         this.emitProgress('converting', 30, 'Loading document...');
         if (options.password) {
           docPtr = this.lokBindings.documentLoadWithOptions(inPath, `,Password=${options.password}`);
@@ -393,7 +395,13 @@ export class BrowserConverter {
         }
 
         const lokFormat = OUTPUT_FORMAT_TO_LOK[outputExt];
-        const filterOptions = options.filterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
+        let filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[outputExt] ?? '';
+        if (options.image?.pageIndex !== undefined) {
+          const page = options.image.pageIndex + 1;
+          filterOptions = filterOptions
+            ? `${filterOptions};PageRange=${page}-${page}`
+            : `PageRange=${page}-${page}`;
+        }
         this.emitProgress('converting', 70, 'Saving...');
         this.lokBindings.documentSaveAs(docPtr, outPath, lokFormat, filterOptions);
       } else {
@@ -405,7 +413,7 @@ export class BrowserConverter {
             inputFormat: ext,
             outputFormat: outputExt,
             password: options.password,
-            filterOptions: options.filterOptions,
+            filterOptions: effectiveFilterOptions,
             pdf: options.pdf,
           });
           const nativeResult = await runNativeConversionWhenReady(
@@ -430,10 +438,7 @@ export class BrowserConverter {
       }
 
       this.emitProgress('converting', 90, 'Reading output...');
-      const sharedResult = this.module.FS.readFile(outPath) as Uint8Array;
-      if (sharedResult.length === 0) {
-        throw new ConversionError(ConversionErrorCode.CONVERSION_FAILED, 'Empty output');
-      }
+      const sharedResult = readExactConvertedOutput(this.module.FS, outPath);
 
       const result = new Uint8Array(sharedResult.length);
       result.set(sharedResult);
@@ -446,14 +451,39 @@ export class BrowserConverter {
         filename: `${baseName}.${outputExt}`,
         duration: Date.now() - startTime,
       };
+    } catch (error) {
+      conversionFailed = true;
+      primaryError = error;
+      throw error;
     } finally {
       if (docPtr !== 0 && this.lokBindings) {
         try {
           this.lokBindings.documentDestroy(docPtr);
         } catch { /* ignore */ }
       }
-      try { this.module?.FS.unlink(inPath); } catch { /* ignore */ }
-      try { this.module?.FS.unlink(outPath); } catch { /* ignore */ }
+      if (csvTransaction) {
+        try {
+          finishCsvConversionTransaction(csvTransaction);
+        } catch (error) {
+          const cleanupError = error instanceof ConversionCleanupUncertaintyError
+            ? error
+            : new ConversionCleanupUncertaintyError([String(error)]);
+          this.quarantineRuntime();
+          if (conversionFailed) {
+            const annotatedError = attachCleanupUncertainty(primaryError, cleanupError);
+            // Cleanup uncertainty intentionally supersedes a non-Error primary failure.
+            // eslint-disable-next-line no-unsafe-finally
+            if (!(primaryError instanceof Error)) throw annotatedError;
+          } else {
+            // A successful conversion must not escape an uncertain CSV cleanup.
+            // eslint-disable-next-line no-unsafe-finally
+            throw cleanupError;
+          }
+        }
+      } else {
+        try { this.module?.FS.unlink(inPath); } catch { /* ignore */ }
+        try { this.module?.FS.unlink(outPath); } catch { /* ignore */ }
+      }
     }
   }
 
@@ -611,7 +641,7 @@ export class BrowserConverter {
  * Runs WASM module in a Web Worker to avoid blocking the main thread.
  * Implements ILibreOfficeConverter for consistent API across platforms.
  */
-export class WorkerBrowserConverter implements ILibreOfficeConverter {
+class WorkerBrowserConverter implements ILibreOfficeConverter {
   private worker: Worker | null = null;
   private initialized = false;
   private initializing = false;
@@ -857,6 +887,11 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if ((!this.initialized || !this.worker) && this.restartOnNextConvert) {
       await this.initialize();
     }
@@ -878,7 +913,7 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
       throw new ConversionError(ConversionErrorCode.UNSUPPORTED_FORMAT, `Unsupported: ${outputExt}`);
     }
 
-    let filterOptions = options.filterOptions;
+    let filterOptions = effectiveFilterOptions;
     if (filterOptions === undefined && outputExt === 'pdf' && options.pdf) {
       filterOptions = buildPdfFilterOptions(options.pdf);
     }
@@ -889,25 +924,10 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
       outputFormat: outputExt,
       filterOptions,
       password: options.password,
+      image: options.image,
     }) as Uint8Array;
 
     const baseName = filename.includes('.') ? filename.substring(0, filename.lastIndexOf('.')) : filename;
-
-    // Check if result is a ZIP file (multi-page image export)
-    // ZIP files start with PK (0x50, 0x4B)
-    const isZip = result.length >= 2 && result[0] === 0x50 && result[1] === 0x4B;
-    const IMAGE_FORMATS = ['png', 'jpg', 'jpeg', 'svg'];
-    const isImageFormat = IMAGE_FORMATS.includes(outputExt.toLowerCase());
-
-    if (isZip && isImageFormat) {
-      // Multi-page image export returns a ZIP
-      return {
-        data: result,
-        mimeType: 'application/zip',
-        filename: `${baseName}_pages.zip`,
-        duration: Date.now() - startTime,
-      };
-    }
 
     return {
       data: result,
@@ -1513,7 +1533,7 @@ export class WorkerBrowserConverter implements ILibreOfficeConverter {
  * This class provides a clean API that mirrors the server-side editor classes
  * but communicates through the worker message protocol.
  */
-export class BrowserEditorProxy implements EditorSession {
+class BrowserEditorProxy implements EditorSession {
   private converter: WorkerBrowserConverter;
   private _sessionId: string;
   private _documentType: 'writer' | 'calc' | 'impress' | 'draw';
@@ -1685,6 +1705,20 @@ export class BrowserEditorProxy implements EditorSession {
   }
 }
 
+/** Create an uninitialized main-thread conversion-only browser facade. */
+export function createBrowserConverter(
+  options: BrowserConverterOptions = {}
+): ILibreOfficeConverter {
+  return exposeConversionOnly(new BrowserConverter(options));
+}
+
+/** Create an uninitialized Worker-owned conversion-only browser facade. */
+export function createWorkerBrowserConverter(
+  options: WorkerBrowserConverterOptions = {}
+): ILibreOfficeConverter {
+  return exposeConversionOnly(new WorkerBrowserConverter(options));
+}
+
 /**
  * Create drop zone for file conversion
  */
@@ -1757,6 +1791,7 @@ export async function quickConvert(
   outputFormat: OutputFormat,
   options: BrowserWasmPaths & { download?: boolean }
 ): Promise<ConversionResult> {
+  resolveSingleResultFilterOptions(outputFormat);
   const converter = new BrowserConverter({
     sofficeJs: options.sofficeJs,
     sofficeWasm: options.sofficeWasm,

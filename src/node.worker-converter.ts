@@ -30,6 +30,7 @@ import {
   PagePreview,
   RenderOptions,
   buildPdfFilterOptions,
+  resolveSingleResultFilterOptions,
 } from './types.js';
 import type { NodeWorkerOperationResponse } from './node-worker-protocol.js';
 
@@ -276,6 +277,11 @@ export class WorkerConverter implements ILibreOfficeConverter {
     options: ConversionOptions,
     filename = 'document'
   ): Promise<ConversionResult> {
+    const effectiveFilterOptions = resolveSingleResultFilterOptions(
+      options.outputFormat,
+      options.filterOptions
+    );
+
     if ((!this.initialized || !this.worker) && this.restartOnNextConvert) {
       await this.initialize();
     }
@@ -299,7 +305,7 @@ export class WorkerConverter implements ILibreOfficeConverter {
     const inputFormat = options.inputFormat || this.getExtensionFromFilename(filename) || 'docx';
     const outputFormat = options.outputFormat;
 
-    let filterOptions = options.filterOptions ?? FORMAT_FILTER_OPTIONS[outputFormat] ?? '';
+    let filterOptions = effectiveFilterOptions ?? FORMAT_FILTER_OPTIONS[outputFormat] ?? '';
     if (!options.filterOptions && outputFormat === 'pdf' && options.pdf) {
       filterOptions = buildPdfFilterOptions(options.pdf) || filterOptions;
     }

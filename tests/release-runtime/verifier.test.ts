@@ -122,7 +122,7 @@ describe('verifier negative verification', () => {
           path: asset.path,
           bytes: synth.assetBytes.get(asset.path),
         })),
-        { path: 'wasm/soffice.worker.js', bytes: Buffer.from('worker') },
+        { path: 'nested/runtime/soffice.worker.js', bytes: Buffer.from('worker') },
       ]
       const zipBuffer = createDeterministicZip(entries)
       const archivePath = join(workRoot, 'worker-entry.zip')

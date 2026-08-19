@@ -1,0 +1,34 @@
+{
+  "id": "close-conversion-runtime-contracts",
+  "name": "close-conversion-runtime-contracts",
+  "title": "Close conversion runtime contracts",
+  "description": "Align the conversion-only public API, CSV cardinality, pthread artifact profile, and successor candidate identity.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "cross-layer",
+  "package": null,
+  "priority": "P0",
+  "creator": "killbus",
+  "assignee": "killbus",
+  "createdAt": "2026-08-17",
+  "completedAt": "2026-08-18",
+  "branch": "fix/conversion-contract-integrity",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "37ed9056ead48a821c5635378472bc06f875c4f5",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-17-csv-single-result-contract",
+    "08-17-pthread-main-script-contract",
+    "08-17-conversion-only-public-surface",
+    "08-17-successor-runtime-qualification"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "All four child contracts are complete. Successor candidate 70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68 passed downloaded-byte Node, sequential conversion, exact ABI/package, deterministic archive, and real-browser Worker gates without publication.",
+  "meta": {
+    "successorCandidateId": "70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68",
+    "qualificationReceipt": ".trellis/tasks/archive/2026-08/08-17-successor-runtime-qualification/acceptance/qualification-receipt.json"
+  }
+}

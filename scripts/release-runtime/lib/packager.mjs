@@ -19,6 +19,7 @@ import {
   ASSET_SHA256SUMS_FILE,
   RELEASE_SHA256SUMS_FILE,
   FORBIDDEN_WORKER_FILE,
+  isForbiddenWorkerPath,
 } from './constants.mjs'
 import { serializePrettyJson, deriveCandidateIdentity } from './canonical.mjs'
 import { validateFrozenSpec, assertNotQualified } from './schemata.mjs'
@@ -74,6 +75,12 @@ async function listRegularFilesRecursively(rootPath, currentPath = rootPath) {
 // Builds the current frozen candidate into one fresh staging directory under
 // workRoot and writes deterministic release assets into a fresh out directory.
 export async function assemble(options) {
+  if (
+    Array.isArray(options.spec?.assets) &&
+    options.spec.assets.some((asset) => isForbiddenWorkerPath(asset?.path))
+  ) {
+    throw new PackError(`forbidden worker asset present: ${FORBIDDEN_WORKER_FILE}`)
+  }
   const spec = validateFrozenSpec(options.spec)
   assertNotQualified(options.spec, 'frozen spec')
   if (options.expectedCandidateId !== undefined) {
@@ -118,10 +125,6 @@ export async function assemble(options) {
         .join(', ')})`
     )
   }
-  if (inspected.some((asset) => asset.path === FORBIDDEN_WORKER_FILE)) {
-    throw new PackError(`forbidden worker asset present: ${FORBIDDEN_WORKER_FILE}`)
-  }
-
   // 2. Derive the candidate identity from immutable provenance + asset table.
   const assets = inspected
     .map(({ path, role, mimeType, bytes, sha256 }) => ({

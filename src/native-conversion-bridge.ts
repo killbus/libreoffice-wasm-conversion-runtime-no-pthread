@@ -9,6 +9,7 @@ import {
   INPUT_FORMAT_CATEGORY,
   LOKDocumentType,
   buildPdfFilterOptions,
+  resolveSingleResultFilterOptions,
 } from './types.js';
 import type { DocumentCategory, InputFormat, OutputFormat, PdfOptions } from './types.js';
 
@@ -250,8 +251,9 @@ function resolveOutputOptions(
   pdf: PdfOptions | undefined
 ): Pick<NativeConversionRequest, 'outputFilterOptions' | 'filterData'> {
   let effectiveOptions: string;
-  if (filterOptions !== undefined) {
-    effectiveOptions = filterOptions;
+  const singleResultOptions = resolveSingleResultFilterOptions(outputFormat, filterOptions);
+  if (singleResultOptions !== undefined) {
+    effectiveOptions = singleResultOptions;
   } else if (outputFormat === 'pdf' && pdf) {
     effectiveOptions = buildPdfFilterOptions(pdf) || FORMAT_FILTER_OPTIONS[outputFormat] || '';
   } else {

@@ -49,7 +49,6 @@ export type OutputFormat =
   | 'ppt'
   | 'odp'
   | 'png'
-  | 'jpg'
   | 'svg';
 
 /**
@@ -77,7 +76,7 @@ export interface ConversionOptions {
   pdf?: PdfOptions;
 
   /**
-   * Image output options (for png, jpg, svg)
+   * Image output options (for png and svg)
    */
   image?: ImageOptions;
 
@@ -164,16 +163,8 @@ export interface ImageOptions {
   /**
    * Page index to export (0-based). Only exports this single page.
    * If not specified, exports the first page (page 0).
-   * Cannot be used together with `pages`.
    */
   pageIndex?: number;
-
-  /**
-   * Array of page indices to export (0-based).
-   * If specified, returns an array of results (one per page).
-   * Cannot be used together with `pageIndex`.
-   */
-  pages?: number[];
 }
 
 /**
@@ -326,19 +317,20 @@ export interface BrowserWasmCorePaths {
 /**
  * Explicit paths to WASM files (Browser).
  *
- * Omitting `pthreadWorkerMode` preserves the legacy external-worker contract.
- * A main-script artifact must not provide `sofficeWorkerJs`.
+ * Omitting `pthreadWorkerMode` selects the main-script contract.
+ * A main-script artifact must not provide `sofficeWorkerJs`; external-worker
+ * artifacts must select `external` and provide their Worker URL explicitly.
  */
 export type BrowserWasmPaths = BrowserWasmCorePaths & (
   | {
-    pthreadWorkerMode?: 'external';
-    /** URL to soffice.worker.js - required by external-worker glue */
-    sofficeWorkerJs: string;
-  }
-  | {
-    pthreadWorkerMode: 'main-script';
+    pthreadWorkerMode?: 'main-script';
     /** Main-script glue has no standalone pthread worker asset. */
     sofficeWorkerJs?: never;
+  }
+  | {
+    pthreadWorkerMode: 'external';
+    /** URL to soffice.worker.js - required by external-worker glue */
+    sofficeWorkerJs: string;
   }
 );
 
@@ -355,15 +347,15 @@ export interface BrowserConverterOptions {
   sofficeData?: string;
   /**
    * Pthread Worker bootstrap mode.
-   * Omitted values retain the legacy external-worker default.
+   * Omitted values select the main-script artifact contract.
    *
-   * @default 'external'
+   * @default 'main-script'
    */
   pthreadWorkerMode?: PthreadWorkerMode;
   /**
    * URL to soffice.worker.js.
-   * Defaults to /wasm/soffice.worker.js in external mode and must be omitted
-   * in main-script mode.
+   * Required when `pthreadWorkerMode` is explicitly `external`; otherwise it
+   * must be omitted. No external-worker URL is inferred or probed.
    */
   sofficeWorkerJs?: string;
 
@@ -464,13 +456,13 @@ export const DEFAULT_WASM_BASE_URL = '/wasm/';
  * @example
  * ```typescript
  * // Use default /wasm/ path (same-origin)
- * const converter = new WorkerBrowserConverter({
+ * const converter = createWorkerBrowserConverter({
  *   ...createWasmPaths(),
  *   browserWorkerJs: '/dist/browser.worker.js',
  * });
  *
  * // Or use your own CDN
- * const converter = new WorkerBrowserConverter({
+ * const converter = createWorkerBrowserConverter({
  *   ...createWasmPaths('https://cdn.example.com/wasm/'),
  *   browserWorkerJs: '/dist/browser.worker.js',
  * });
@@ -483,7 +475,7 @@ export function createWasmPaths(baseUrl: string = DEFAULT_WASM_BASE_URL): Browse
     sofficeJs: `${base}soffice.js`,
     sofficeWasm: `${base}soffice.wasm`,
     sofficeData: `${base}soffice.data`,
-    sofficeWorkerJs: `${base}soffice.worker.js`,
+    pthreadWorkerMode: 'main-script',
   };
 }
 
@@ -647,7 +639,6 @@ export const FORMAT_FILTERS: Record<OutputFormat, string> = {
   ppt: 'MS PowerPoint 97',
   odp: 'impress8',
   png: 'writer_png_Export',
-  jpg: 'writer_jpg_Export',
   svg: 'writer_svg_Export',
 };
 
@@ -670,35 +661,29 @@ export const DOC_TYPE_FILTERS: Record<LOKDocumentType, Partial<Record<OutputForm
   [LOKDocumentType.TEXT]: {
     pdf: 'writer_pdf_Export',
     png: 'writer_png_Export',
-    jpg: 'writer_jpg_Export',
     svg: 'writer_svg_Export',
-    html: 'HTML (StarWriter)',
   },
   [LOKDocumentType.SPREADSHEET]: {
     pdf: 'calc_pdf_Export',
     png: 'calc_png_Export',
-    jpg: 'calc_jpg_Export',
     svg: 'calc_svg_Export',
     html: 'HTML (StarCalc)',
   },
   [LOKDocumentType.PRESENTATION]: {
     pdf: 'impress_pdf_Export',
     png: 'impress_png_Export',
-    jpg: 'impress_jpg_Export',
     svg: 'impress_svg_Export',
     html: 'impress_html_Export',
   },
   [LOKDocumentType.DRAWING]: {
     pdf: 'draw_pdf_Export',
     png: 'draw_png_Export',
-    jpg: 'draw_jpg_Export',
     svg: 'draw_svg_Export',
     html: 'draw_html_Export',
   },
   [LOKDocumentType.OTHER]: {
     pdf: 'writer_pdf_Export',
     png: 'writer_png_Export',
-    jpg: 'writer_jpg_Export',
     svg: 'writer_svg_Export',
   },
 };
@@ -739,7 +724,6 @@ export const FORMAT_MIME_TYPES: Record<OutputFormat, string> = {
   ppt: 'application/vnd.ms-powerpoint',
   odp: 'application/vnd.oasis.opendocument.presentation',
   png: 'image/png',
-  jpg: 'image/jpeg',
   svg: 'image/svg+xml',
 };
 
@@ -775,7 +759,7 @@ export const EXTENSION_TO_FORMAT: Record<string, InputFormat> = {
  * IMPORTANT: These are the formats that LibreOffice's saveAs() actually supports.
  * The extension maps in init.cxx determine what filters are available per document type.
  * 
- * Writer (TEXT): doc, docx, odt, pdf, rtf, txt, html, png, epub
+ * Writer (TEXT): doc, docx, odt, pdf, rtf, txt, png, epub
  * Calc (SPREADSHEET): csv, ods, pdf, xls, xlsx, html, png
  * Impress (PRESENTATION): odp, pdf, ppt, pptx, svg, html, png
  * Draw (DRAWING): odg, pdf, svg, html, png
@@ -784,7 +768,7 @@ export const EXTENSION_TO_FORMAT: Record<string, InputFormat> = {
  * NOTE: svg is only supported for Impress and Draw, not Writer or Calc.
  */
 export const LOK_DOCTYPE_OUTPUT_FORMATS: Record<LOKDocumentType, OutputFormat[]> = {
-  [LOKDocumentType.TEXT]: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'png'],
+  [LOKDocumentType.TEXT]: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'png'],
   [LOKDocumentType.SPREADSHEET]: ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'html', 'png'],
   [LOKDocumentType.PRESENTATION]: ['pdf', 'pptx', 'ppt', 'odp', 'png', 'svg', 'html'],
   [LOKDocumentType.DRAWING]: ['pdf', 'png', 'svg', 'html'],
@@ -821,7 +805,6 @@ export const OUTPUT_FORMAT_TO_LOK: Record<OutputFormat, string> = {
   ppt: 'ppt',
   odp: 'odp',
   png: 'png',
-  jpg: 'jpg',
   svg: 'svg',
 };
 
@@ -835,10 +818,39 @@ export const FORMAT_FILTER_OPTIONS: Partial<Record<OutputFormat, string>> = {
   // - Quality
   pdf: '',
   // CSV can specify separator, encoding, etc.
-  csv: '44,34,76,1,,0,false,true,false,false,false,-1',
+  csv: '44,34,76,1,,0,false,true,false,false,false,0',
   // Text encoding
   txt: 'UTF8',
 };
+
+const CSV_EXPORT_SHEET_TOKEN_INDEX = 11;
+
+/**
+ * Resolve filter options for a singular conversion result.
+ *
+ * LibreOffice writes CSV exports to suffixed sibling files whenever token 11
+ * is non-zero. Singular conversion APIs therefore accept only an absent,
+ * empty, missing, or canonical `0` sheet token and preserve every other token
+ * exactly as supplied by the caller.
+ */
+export function resolveSingleResultFilterOptions(
+  outputFormat: OutputFormat | string,
+  filterOptions?: FilterOptions
+): FilterOptions | undefined {
+  if (outputFormat.toLowerCase() !== 'csv') return filterOptions;
+
+  const effectiveOptions = filterOptions ?? FORMAT_FILTER_OPTIONS.csv ?? '';
+  const sheetToken = effectiveOptions.split(',')[CSV_EXPORT_SHEET_TOKEN_INDEX];
+
+  if (sheetToken === undefined || sheetToken === '' || sheetToken === '0') {
+    return effectiveOptions;
+  }
+
+  throw new ConversionError(
+    ConversionErrorCode.INVALID_INPUT,
+    `CSV single-result conversion requires filter option token 11 to be empty or 0; received ${JSON.stringify(sheetToken)}`
+  );
+}
 
 /**
  * CSV Import filter options for loading CSV files as spreadsheets.
@@ -929,7 +941,7 @@ export const INPUT_FORMAT_CATEGORY: Record<InputFormat, DocumentCategory> = {
 export const CATEGORY_OUTPUT_FORMATS: Record<DocumentCategory, OutputFormat[]> = {
   // Writer documents can export to (based on aWriterExtensionMap in init.cxx):
   // NOTE: jpg and svg are NOT supported for Writer - only png for images
-  text: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'png'],
+  text: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'png'],
   // Calc documents can export to (based on aCalcExtensionMap in init.cxx):
   // NOTE: jpg and svg are NOT supported for Calc - only png for images
   spreadsheet: ['pdf', 'xlsx', 'xls', 'ods', 'csv', 'html', 'png'],
@@ -1094,11 +1106,8 @@ export interface EditorOperationResult<T = unknown> {
 export type InputFormatOptions = Pick<ConversionOptions, 'inputFormat'>;
 
 /**
- * Common interface for all LibreOffice converter implementations.
- * Ensures consistent API across different threading models (main thread, workers, child processes).
- *
- * All methods returning Promise are async in the interface to allow implementations
- * flexibility in whether they need actual async operations.
+ * Public conversion-only interface shared by all runtime owners.
+ * Raw editor, rendering, callback, and view APIs are intentionally absent.
  */
 export interface ILibreOfficeConverter {
   // ============================================
@@ -1125,71 +1134,4 @@ export interface ILibreOfficeConverter {
     filename?: string
   ): Promise<ConversionResult>;
 
-  // ============================================
-  // Document Inspection
-  // ============================================
-
-  /** Get the number of pages in a document. */
-  getPageCount(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions
-  ): Promise<number>;
-
-  /** Get document information including type and valid output formats. */
-  getDocumentInfo(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions
-  ): Promise<DocumentInfo>;
-
-  // ============================================
-  // Page Rendering
-  // ============================================
-
-  /** Render a single page as an image. */
-  renderPage(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions,
-    pageIndex: number,
-    width: number,
-    height?: number
-  ): Promise<PagePreview>;
-
-  /** Render multiple pages as images. */
-  renderPagePreviews(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions,
-    renderOptions?: RenderOptions
-  ): Promise<PagePreview[]>;
-
-  /**
-   * Render a page at full quality (native resolution based on DPI).
-   * Unlike renderPage which scales to a fixed width, this renders at the
-   * document's native resolution converted to pixels at the specified DPI.
-   */
-  renderPageFullQuality(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions,
-    pageIndex: number,
-    renderOptions?: FullQualityRenderOptions
-  ): Promise<FullQualityPagePreview>;
-
-  // ============================================
-  // Editor Operations
-  // ============================================
-
-  /** Open a document for editing and return a session. */
-  openDocument(
-    input: Uint8Array | ArrayBuffer,
-    options: InputFormatOptions
-  ): Promise<EditorSession>;
-
-  /** Execute an editor operation on an open document. */
-  editorOperation<T = unknown>(
-    sessionId: string,
-    method: string,
-    args?: unknown[]
-  ): Promise<EditorOperationResult<T>>;
-
-  /** Close an editor session and optionally get the modified document. */
-  closeDocument(sessionId: string): Promise<Uint8Array | undefined>;
 }

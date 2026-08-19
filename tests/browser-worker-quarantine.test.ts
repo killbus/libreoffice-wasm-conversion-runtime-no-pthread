@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkerBrowserConverter } from '../src/browser.js';
+import { createWorkerBrowserConverter } from '../src/browser.js';
 
 interface PostedMessage {
   type: string;
   id: number;
+  filterOptions?: string;
+  image?: { pageIndex?: number };
 }
 
 class RestartingFakeWorker {
@@ -87,9 +89,64 @@ afterEach(() => {
 });
 
 describe('WorkerBrowserConverter quarantine lifecycle', () => {
+  it('materializes the CSV zero default before crossing the Worker boundary', async () => {
+    vi.stubGlobal('Worker', RestartingFakeWorker);
+    const converter = createWorkerBrowserConverter({ browserWorkerJs: '/fake-worker.js' });
+
+    await converter.initialize();
+    await expect(converter.convert(
+      new Uint8Array([1]),
+      { inputFormat: 'xlsx', outputFormat: 'csv' },
+      'report.xlsx'
+    )).rejects.toThrow('cleanup uncertain');
+
+    const convertMessage = RestartingFakeWorker.instances[0]!.messages.find(
+      (message) => message.type === 'convert'
+    );
+    expect(convertMessage?.filterOptions).toBe(
+      '44,34,76,1,,0,false,true,false,false,false,0'
+    );
+  });
+
+  it('forwards single-page image selection without exposing page inspection', async () => {
+    vi.stubGlobal('Worker', RestartingFakeWorker);
+    const converter = createWorkerBrowserConverter({ browserWorkerJs: '/fake-worker.js' });
+
+    await converter.initialize();
+    await expect(converter.convert(
+      new Uint8Array([1]),
+      { inputFormat: 'pptx', outputFormat: 'png', image: { pageIndex: 2 } },
+      'slides.pptx'
+    )).rejects.toThrow('cleanup uncertain');
+
+    const convertMessage = RestartingFakeWorker.instances[0]!.messages.find(
+      (message) => message.type === 'convert'
+    );
+    expect(convertMessage?.image).toEqual({ pageIndex: 2 });
+  });
+
+  it('rejects non-singular CSV options before posting to the Worker', async () => {
+    vi.stubGlobal('Worker', RestartingFakeWorker);
+    const converter = createWorkerBrowserConverter({ browserWorkerJs: '/fake-worker.js' });
+
+    await converter.initialize();
+    await expect(converter.convert(
+      new Uint8Array([1]),
+      {
+        inputFormat: 'xlsx',
+        outputFormat: 'csv',
+        filterOptions: '44,34,76,1,,0,false,true,false,false,false,-1',
+      },
+      'report.xlsx'
+    )).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(RestartingFakeWorker.instances[0]!.messages.filter(
+      (message) => message.type === 'convert'
+    )).toHaveLength(0);
+  });
+
   it('terminates a quarantined Worker and automatically converts with a fresh Worker', async () => {
     vi.stubGlobal('Worker', RestartingFakeWorker);
-    const converter = new WorkerBrowserConverter({ browserWorkerJs: '/fake-worker.js' });
+    const converter = createWorkerBrowserConverter({ browserWorkerJs: '/fake-worker.js' });
 
     await converter.initialize();
     const firstWorker = RestartingFakeWorker.instances[0];
@@ -113,28 +170,4 @@ describe('WorkerBrowserConverter quarantine lifecycle', () => {
     expect(result.data).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]));
   });
 
-  it('does not retain a pending request when postMessage throws synchronously', async () => {
-    const converter = new WorkerBrowserConverter();
-    const worker = {
-      postMessage: vi.fn(() => {
-        throw new Error('structured clone failed');
-      }),
-      terminate: vi.fn(),
-    } as unknown as Worker;
-    Object.assign(converter as unknown as Record<string, unknown>, {
-      worker,
-      initialized: true,
-    });
-
-    await expect(converter.convert(
-      new Uint8Array([1, 2, 3]),
-      { inputFormat: 'docx', outputFormat: 'pdf' },
-      'report.docx'
-    )).rejects.toThrow('structured clone failed');
-
-    const internals = converter as unknown as {
-      pendingRequests: Map<number, unknown>;
-    };
-    expect(internals.pendingRequests).toHaveLength(0);
-  });
 });

@@ -1,7 +1,11 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { isForbiddenWorkerPath } from '../scripts/release-runtime/lib/constants.mjs';
 import { LIBREOFFICE_BROWSER_ASSET_CONTRACT } from '../src/browser-assets.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,6 +16,60 @@ const buildPackageSource = readFileSync(
   resolve(root, 'scripts/build-package.mjs'),
   'utf8',
 );
+
+interface NpmPackDryRunResult {
+  files: Array<{ path: string }>;
+}
+
+function readPublishedPackagePaths(packageRoot: string): string[] {
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const output = execFileSync(
+    npm,
+    ['pack', '--dry-run', '--json', '--ignore-scripts'],
+    { cwd: packageRoot, encoding: 'utf8' },
+  );
+  const [result] = JSON.parse(output) as NpmPackDryRunResult[];
+
+  if (!result || !Array.isArray(result.files)) {
+    throw new Error('npm pack --dry-run did not return a package inventory');
+  }
+
+  return result.files.map(({ path }) => path);
+}
+
+async function withMaterializedPublishTree(
+  run: (packageRoot: string) => Promise<void>,
+): Promise<void> {
+  const packageRoot = await mkdtemp(join(tmpdir(), 'lo-npm-pack-contract-'));
+  const materializedFiles = [
+    'README.md',
+    'dist/browser.js',
+    'dist/browser.d.ts',
+    'dist/browser.worker.global.js',
+    'dist/browser-assets.js',
+    'dist/browser-assets.d.ts',
+    'wasm/loader.cjs',
+    'wasm/soffice.cjs',
+    'wasm/soffice.js',
+    'wasm/soffice.data',
+    'wasm/soffice.wasm',
+  ];
+
+  try {
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      `${JSON.stringify(packageJson, null, 2)}\n`,
+    );
+    for (const path of materializedFiles) {
+      const target = join(packageRoot, path);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, `fixture:${path}\n`);
+    }
+    await run(packageRoot);
+  } finally {
+    await rm(packageRoot, { recursive: true, force: true });
+  }
+}
 
 describe('published package contract', () => {
   it('uses a fork-specific immutable package identity', () => {
@@ -34,6 +92,8 @@ describe('published package contract', () => {
     expect(buildPackageSource).toContain(
       'await verifyNativePackageAssets({ root: process.cwd() });',
     );
+    expect(buildPackageSource).toContain('buildJsBundles({ silent });');
+    expect(buildPackageSource).not.toContain('skip-native');
     expect(packageJson.scripts.build).not.toContain('build:wasm');
     expect(packageJson.scripts.prepack).not.toContain('build:wasm');
     expect(packageJson.scripts.prepare).toBeUndefined();
@@ -55,6 +115,27 @@ describe('published package contract', () => {
     expect(packageJson.files).not.toContain('wasm/soffice.data.js.metadata');
     expect(packageJson.files).not.toContain('wasm/soffice.worker.js');
     expect(packageJson.files).not.toContain('wasm/soffice.worker.cjs');
+  });
+
+  it('audits a materialized npm inventory at every depth', async () => {
+    await withMaterializedPublishTree(async (packageRoot) => {
+      const publishedPaths = readPublishedPackagePaths(packageRoot);
+
+      expect(publishedPaths).toContain('package.json');
+      expect(publishedPaths).toContain('dist/browser.js');
+      expect(publishedPaths).toContain('dist/browser.worker.global.js');
+      expect(publishedPaths.filter(isForbiddenWorkerPath)).toEqual([]);
+
+      const forbiddenPath = 'dist/nested/runtime/soffice.worker.js';
+      const forbiddenTarget = join(packageRoot, forbiddenPath);
+      await mkdir(dirname(forbiddenTarget), { recursive: true });
+      await writeFile(forbiddenTarget, 'forbidden fixture\n');
+
+      const contaminatedPaths = readPublishedPackagePaths(packageRoot);
+      expect(contaminatedPaths.filter(isForbiddenWorkerPath)).toEqual([
+        forbiddenPath,
+      ]);
+    });
   });
 
   it('exports the typed browser asset contract', () => {

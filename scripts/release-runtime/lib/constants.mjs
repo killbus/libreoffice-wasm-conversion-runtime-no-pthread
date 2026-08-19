@@ -35,3 +35,10 @@ export const FIXED_DOS_DATE = 0x0021 // 1980-01-01
 export const ZIP_METHOD_STORE = 0
 
 export const FORBIDDEN_WORKER_FILE = 'soffice.worker.js'
+
+/** Reject the standalone pthread worker at any inventory depth. */
+export function isForbiddenWorkerPath(path) {
+  if (typeof path !== 'string') return false
+  const segments = path.split(/[\\/]/)
+  return segments.at(-1) === FORBIDDEN_WORKER_FILE
+}

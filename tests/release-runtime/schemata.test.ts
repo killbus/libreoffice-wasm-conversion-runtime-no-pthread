@@ -23,21 +23,16 @@ describe('frozen spec schema negatives', () => {
     await withSynthetic(async ({ spec }) => {
       const bad = {
         ...spec,
-        assets: [
-          ...spec.assets,
-          {
-            path: 'wasm/soffice.worker.js',
-            role: 'pthreadWorker',
-            mimeType: 'text/javascript',
-            bytes: 1,
-            sha256: 'a'.repeat(64),
-            sourceRoot: 'native',
-            sourcePath: 'soffice.worker.js',
-          },
-        ],
+        assets: spec.assets.map((asset, index) =>
+          index === 0
+            ? { ...asset, path: 'nested/runtime/soffice.worker.js' }
+            : asset
+        ),
       }
       expect(() => validateFrozenSpec(bad)).toThrow(SchemaError)
-      expect(() => validateFrozenSpec(bad)).toThrow(/eight runtime assets/)
+      expect(() => validateFrozenSpec(bad)).toThrow(
+        /frozen spec must not contain soffice\.worker\.js/
+      )
     })
   })
 
@@ -81,6 +76,14 @@ describe('frozen spec schema negatives', () => {
           runtime: { pthreadWorkerMode: 'external', externalWorker: null },
         })
       ).toThrow(SchemaError)
+      for (const externalWorker of ['', '   ', '\t']) {
+        expect(() =>
+          validateFrozenSpec({
+            ...spec,
+            runtime: { pthreadWorkerMode: 'external', externalWorker },
+          })
+        ).toThrow(/external pthread mode requires a non-empty externalWorker path/)
+      }
       expect(() =>
         validateFrozenSpec({
           ...spec,
@@ -92,6 +95,29 @@ describe('frozen spec schema negatives', () => {
 })
 
 describe('candidate manifest schema', () => {
+  it('rejects a forbidden standalone worker at any asset depth', async () => {
+    await withSynthetic(async ({ spec }) => {
+      const assets = spec.assets.map(({ sourceRoot: _sourceRoot, sourcePath: _sourcePath, ...asset }, index) =>
+        index === 0
+          ? { ...asset, path: 'nested/runtime/soffice.worker.js' }
+          : asset
+      )
+      const manifest = {
+        schemaVersion: 1,
+        kind: 'pdfhow-libreoffice-runtime-candidate',
+        candidateId: spec.candidateId,
+        releaseQualified: false,
+        provenance: spec.provenance,
+        runtime: spec.runtime,
+        assets,
+      }
+
+      expect(() => validateCandidateManifest(manifest)).toThrow(
+        /candidate manifest must not contain soffice\.worker\.js/
+      )
+    })
+  })
+
   it('rejects a candidate manifest that claims qualification', () => {
     expect(() =>
       validateCandidateManifest({

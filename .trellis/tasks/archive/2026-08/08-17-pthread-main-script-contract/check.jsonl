@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Audit every browser owner, artifact inventory, and release boundary."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reject duplicated mode inference and path-name guards."}
+{"file": ".trellis/tasks/archive/2026-08/08-17-pthread-main-script-contract/research/source-facts.md", "reason": "Verify claims against exact source and artifact facts."}
+{"file": ".trellis/tasks/archive/2026-08/08-17-pthread-main-script-contract/design.md", "reason": "Check main-script default, no fallback, immutable candidate, and real-browser gate requirements."}

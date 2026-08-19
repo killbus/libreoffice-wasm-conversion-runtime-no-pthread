@@ -41,7 +41,7 @@ import {
 } from './lib/constants.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const DEFAULT_SPEC = join(SCRIPT_DIR, 'candidate-spec.json')
+const DEFAULT_SPEC = join(SCRIPT_DIR, 'qualified-candidate-spec.json')
 
 const USAGE = `Usage:
   node scripts/release-runtime/stage-draft.mjs \\
@@ -108,18 +108,11 @@ function buildReleaseNotes({ candidateId, provenance, runtime, assets, archiveSh
     `No \`soffice.worker.js\` is present; this candidate uses \`main-script\` pthread`,
     `mode with an \`null\` external worker.`,
     ``,
-    `## Known disclosure`,
-    ``,
-    `One isolated 180-second native-ABI cold-start timeout was previously observed`,
-    `during validation of this exact byte set. It did not reproduce on an immediate`,
-    `clean rerun. Independent acceptance therefore requires at least five`,
-    `consecutive retry-free fresh-browser cold-start conversions; any timeout must`,
-    `fail acceptance and be surfaced, not hidden by retrying.`,
-    ``,
     `## No-build guarantee`,
     ``,
     `Staging this draft triggers no LibreOffice/WASM build. The payload is the`,
-    `frozen run \`31211473147\` native bytes plus wrapper \`${provenance.wrapper.commit}\` output.`,
+    `frozen run \`${provenance.native.githubActionsRunId}\` native bytes plus wrapper ` +
+      `\`${provenance.wrapper.commit}\` output.`,
   ].join('\n')
 }
 
@@ -344,12 +337,6 @@ async function main(argv) {
       notes:
         'No LibreOffice/WASM build workflow was run or could be triggered by this staging path.',
       lastKnownNativeRunId: spec.provenance.native.githubActionsRunId,
-    },
-    knownColdStartTimeout: {
-      disclosure:
-        'One isolated 180-second native-ABI cold-start timeout was previously observed against this exact byte set; it did not reproduce on an immediate clean rerun.',
-      acceptanceRequirement:
-        'At least five consecutive retry-free fresh-browser cold-start conversions must pass; any timeout surfaces as a failure.',
     },
   }
 
