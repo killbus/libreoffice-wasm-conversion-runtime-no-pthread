@@ -15,7 +15,6 @@ export type {
   ImageOptions,
   InputFormat,
   LibreOfficeWasmOptions,
-  PthreadWorkerMode,
   BrowserWasmPaths,
   BrowserConverterOptions,
   WorkerBrowserConverterOptions,
@@ -93,13 +92,11 @@ import {
 } from './conversion-output.js';
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OpenDocumentOptions } from './editor/types.js';
-import { terminateExportedPThreads } from './emscripten-pthread.js';
 import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 
 /** Window with Module property for Emscripten */
 interface EmscriptenWindow extends Window {
   Module?: Partial<EmscriptenModule> & {
-    mainScriptUrlOrBlob?: string;
     locateFile?: (path: string) => string;
     print?: (...args: unknown[]) => void;
     printErr?: (...args: unknown[]) => void;
@@ -162,8 +159,6 @@ class BrowserConverter {
       sofficeJs,
       sofficeWasm,
       sofficeData,
-      pthreadWorkerMode,
-      sofficeWorkerJs,
       ...converterOptions
     } = options;
     this.options = {
@@ -173,24 +168,17 @@ class BrowserConverter {
         sofficeJs,
         sofficeWasm,
         sofficeData,
-        pthreadWorkerMode,
-        sofficeWorkerJs,
       }),
     };
   }
 
-  private terminatePThreads(targetModule: EmscriptenModule | null): void {
-    terminateExportedPThreads(targetModule);
-  }
 
   private quarantineRuntime(): void {
-    const targetModule = this.module;
     this.initialized = false;
     this.corrupted = true;
     this.lokBindings = null;
     this.module = null;
     this._lokInstance = 0;
-    this.terminatePThreads(targetModule);
   }
 
   private mapNativeConversionError(error: NativeConversionError): ConversionError {
@@ -257,7 +245,6 @@ class BrowserConverter {
       // Pre-configure the global Module object before loading the script
       // soffice.js checks for existing Module and merges with it
       win.Module = withEmscriptenStartupPolicy({
-        mainScriptUrlOrBlob: sofficeJs,
         locateFile: (path: string) => locateBrowserRuntimeFile(path, this.options),
         print: this.options.verbose ? console.log : () => { },
         printErr: this.options.verbose ? console.error : () => { },
@@ -603,14 +590,12 @@ class BrowserConverter {
    * Cleanup
    */
   async destroy(): Promise<void> {
-    const targetModule = this.module;
     if (this.lokBindings) {
       try {
         this.lokBindings.destroy();
       } catch { /* ignore */ }
       this.lokBindings = null;
     }
-    this.terminatePThreads(targetModule);
     this.module = null;
     this._lokInstance = 0;
     this.initialized = false;
@@ -656,8 +641,6 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
       sofficeJs,
       sofficeWasm,
       sofficeData,
-      pthreadWorkerMode,
-      sofficeWorkerJs,
       ...converterOptions
     } = options;
     this.options = {
@@ -668,8 +651,6 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
         sofficeJs,
         sofficeWasm,
         sofficeData,
-        pthreadWorkerMode,
-        sofficeWorkerJs,
       }),
     };
   }
@@ -769,10 +750,6 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
         sofficeJs: this.options.sofficeJs,
         sofficeWasm: this.options.sofficeWasm,
         sofficeData: this.options.sofficeData,
-        pthreadWorkerMode: this.options.pthreadWorkerMode,
-        ...(this.options.pthreadWorkerMode === 'external'
-          ? { sofficeWorkerJs: this.options.sofficeWorkerJs }
-          : {}),
         enableProgressTracking: this.options.enableProgressTracking,
         verbose: this.options.verbose,
         fonts: this.options.fonts,
@@ -1749,8 +1726,6 @@ export function createDropZone(
           sofficeJs: options.sofficeJs,
           sofficeWasm: options.sofficeWasm,
           sofficeData: options.sofficeData,
-          pthreadWorkerMode: options.pthreadWorkerMode,
-          sofficeWorkerJs: options.sofficeWorkerJs,
           onProgress: options.onProgress ? (p: WasmLoadProgress) => options.onProgress!({ percent: p.percent, message: p.message }) : undefined,
         });
         await converter.initialize();
@@ -1796,8 +1771,6 @@ export async function quickConvert(
     sofficeJs: options.sofficeJs,
     sofficeWasm: options.sofficeWasm,
     sofficeData: options.sofficeData,
-    pthreadWorkerMode: options.pthreadWorkerMode,
-    sofficeWorkerJs: options.sofficeWorkerJs,
   });
   try {
     await converter.initialize();

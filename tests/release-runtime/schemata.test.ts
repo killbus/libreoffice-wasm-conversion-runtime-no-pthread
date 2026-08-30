@@ -68,28 +68,14 @@ describe('frozen spec schema negatives', () => {
     })
   })
 
-  it('requires an external-worker path in external mode and null in main-script mode', async () => {
+  it('requires the sole no-pthread runtime marker', async () => {
     await withSynthetic(async ({ spec }) => {
-      expect(() =>
-        validateFrozenSpec({
-          ...spec,
-          runtime: { pthreadWorkerMode: 'external', externalWorker: null },
-        })
-      ).toThrow(SchemaError)
-      for (const externalWorker of ['', '   ', '\t']) {
-        expect(() =>
-          validateFrozenSpec({
-            ...spec,
-            runtime: { pthreadWorkerMode: 'external', externalWorker },
-          })
-        ).toThrow(/external pthread mode requires a non-empty externalWorker path/)
-      }
-      expect(() =>
-        validateFrozenSpec({
-          ...spec,
-          runtime: { pthreadWorkerMode: 'main-script', externalWorker: 'wasm/x.js' },
-        })
-      ).toThrow(SchemaError)
+      expect(() => validateFrozenSpec({ ...spec, runtime: { threading: 'pthread' } }))
+        .toThrow(/runtime threading must be none/)
+      expect(() => validateFrozenSpec({
+        ...spec,
+        runtime: { threading: 'none', pthreadWorkerMode: 'main-script' },
+      })).toThrow(/legacy pthread runtime metadata is not accepted/)
     })
   })
 })
@@ -126,7 +112,7 @@ describe('candidate manifest schema', () => {
         candidateId: 'a'.repeat(64),
         releaseQualified: true,
         provenance: { native: { commit: 'a'.repeat(40), githubActionsRunId: '1', abi: 'x', schemaVersion: 1 }, wrapper: { commit: 'b'.repeat(40) } },
-        runtime: { pthreadWorkerMode: 'main-script', externalWorker: null },
+        runtime: { threading: 'none' },
         assets: [],
       })
     ).toThrow(SchemaError)
@@ -139,7 +125,7 @@ describe('candidate manifest schema', () => {
       candidateId: 'a'.repeat(64),
       releaseQualified: false,
       provenance: { native: { commit: 'a'.repeat(40), githubActionsRunId: '1', abi: 'x', schemaVersion: 1 }, wrapper: { commit: 'b'.repeat(40) } },
-      runtime: { pthreadWorkerMode: 'main-script', externalWorker: null },
+      runtime: { threading: 'none' },
       assets: [],
     }
     expect(() =>

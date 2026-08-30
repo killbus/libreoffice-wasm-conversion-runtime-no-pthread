@@ -79,7 +79,6 @@ import { createWorkerBrowserConverter, createWasmPaths } from '@killbus/libreoff
 const converter = createWorkerBrowserConverter({
   ...createWasmPaths('/wasm/'),
   browserWorkerJs: '/assets/libreoffice/browser.worker.global.js',
-  pthreadWorkerMode: 'main-script',
   onProgress: (info) => console.log(`${info.percent}%: ${info.message}`),
 });
 
@@ -118,14 +117,9 @@ for (const asset of Object.values(LIBREOFFICE_BROWSER_ASSET_CONTRACT.assets)) {
 }
 ```
 
-The current contract is `pthreadWorkerMode: 'main-script'`; do not deploy or configure
-an external `soffice.worker.js`. Serve the four declared assets with their declared MIME
-types, and pass the resulting URLs to `createWorkerBrowserConverter`.
-**Required HTTP headers** for SharedArrayBuffer:
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
+The runtime is compiled without pthread support. Deploy the four declared assets with
+their declared MIME types and pass the resulting URLs to
+`createWorkerBrowserConverter`. Cross-origin isolation headers are not required.
 
 ## Font Support
 

@@ -321,7 +321,7 @@ export class LOKBindings {
       throw new Error('WASM string is not null-terminated within memory bounds');
     }
 
-    // Copy the data to avoid SharedArrayBuffer issues in browsers.
+    // Copy the data into an owned browser buffer.
     const slice = heap.slice(ptr, end);
     return textDecoder.decode(slice);
   }
@@ -1907,8 +1907,8 @@ export class LOKBindings {
       // Read the payload string
       let payload = '';
       if (payloadLength > 0) {
-        // Copy bytes from HEAPU8 to avoid SharedArrayBuffer issues in browsers
-        // TextDecoder.decode() doesn't accept SharedArrayBuffer views in some browsers
+        // Copy bytes from HEAPU8 into an owned browser buffer
+        // TextDecoder.decode() should receive an owned ArrayBuffer view
         const len = Math.min(payloadLength, bufferSize - 1);
         const bytes = this.module.HEAPU8.slice(payloadBuffer, payloadBuffer + len);
         payload = textDecoder.decode(bytes);

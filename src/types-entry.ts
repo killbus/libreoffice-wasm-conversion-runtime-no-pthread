@@ -37,7 +37,6 @@ export type {
 
 export type {
   LibreOfficeWasmOptions,
-  PthreadWorkerMode,
   BrowserWasmPaths,
   BrowserConverterOptions,
   WorkerBrowserConverterOptions,

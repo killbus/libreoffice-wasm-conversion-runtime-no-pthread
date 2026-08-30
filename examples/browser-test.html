@@ -100,13 +100,7 @@
     
     // Check browser capabilities on page load
     console.log('=== Browser Capability Check ===');
-    console.log('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
-    console.log('crossOriginIsolated:', window.crossOriginIsolated);
-    console.log('User Agent:', navigator.userAgent);
-    if (!window.crossOriginIsolated) {
-      console.error('⚠️ WARNING: crossOriginIsolated is false! WASM threads will not work.');
-      console.error('Make sure COOP/COEP headers are set correctly.');
-    }
+    console.log('crossOriginIsolated (not required):', window.crossOriginIsolated);
     
     // Shared converter instance
     let converter = null;
@@ -114,11 +108,6 @@
     
     // Pre-load LibreOffice on page load
     async function preloadConverter() {
-      if (!window.crossOriginIsolated) {
-        setStatus('❌ Cannot preload: crossOriginIsolated is false', 'error');
-        return;
-      }
-      
       setStatus('🔄 Pre-loading LibreOffice...', 'progress');
       console.log('Pre-loading LibreOffice WASM...');
       
@@ -168,10 +157,6 @@
       previewContainer.style.display = 'none';
       
       // Re-check at test time
-      console.log('crossOriginIsolated:', window.crossOriginIsolated);
-      if (!window.crossOriginIsolated) {
-        throw new Error('crossOriginIsolated is false - SharedArrayBuffer not available');
-      }
       
       try {
         console.log('Fetching test file:', filename);
@@ -220,10 +205,6 @@
       previewContainer.innerHTML = '';
       previewContainer.style.display = 'flex';
       
-      console.log('crossOriginIsolated:', window.crossOriginIsolated);
-      if (!window.crossOriginIsolated) {
-        throw new Error('crossOriginIsolated is false - SharedArrayBuffer not available');
-      }
       
       try {
         console.log('Fetching test file:', filename);

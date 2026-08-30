@@ -5,7 +5,7 @@
  * Communication is via postMessage.
  */
 
-import type { ConversionOptions, EditorOperationResult, EmscriptenModule, PthreadWorkerMode, WasmLoadPhase, WasmLoadProgress } from './types.js';
+import type { ConversionOptions, EditorOperationResult, EmscriptenModule, WasmLoadPhase, WasmLoadProgress } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
 import { buildLoadOptions } from './types.js';
 import {
@@ -15,7 +15,6 @@ import {
 import { createEditor, OfficeEditor } from './editor/index.js';
 import type { OperationResult } from './editor/types.js';
 import { LibreOfficeConverter } from './converter.js';
-import { terminateExportedPThreads } from './emscripten-pthread.js';
 import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 
 // ============================================
@@ -269,8 +268,6 @@ interface WorkerMessage {
   sofficeJs?: string;
   sofficeWasm?: string;
   sofficeData?: string;
-  pthreadWorkerMode?: PthreadWorkerMode;
-  sofficeWorkerJs?: string;
   enableProgressTracking?: boolean;  // Opt-in: enable download progress tracking (disabled by default)
   verbose?: boolean;
   // Font injection
@@ -399,10 +396,7 @@ interface WorkerResponse {
 }
 
 /** Web Worker global scope with Module property */
-/** Extended EmscriptenModule with pthread worker config */
-interface EmscriptenModuleConfig extends Partial<EmscriptenModule> {
-  mainScriptUrlOrBlob?: string;
-}
+type EmscriptenModuleConfig = Partial<EmscriptenModule>;
 
 interface WorkerGlobalScopeWithModule {
   Module?: EmscriptenModuleConfig;
@@ -561,7 +555,7 @@ async function handleInit(msg: WorkerMessage) {
     });
     return;
   }
-  const { sofficeJs, sofficeWasm, sofficeData, pthreadWorkerMode, sofficeWorkerJs } = runtimePaths;
+  const { sofficeJs, sofficeWasm, sofficeData } = runtimePaths;
 
   const verbose = msg.verbose || false;
 
@@ -592,12 +586,8 @@ async function handleInit(msg: WorkerMessage) {
       sofficeJs,
       sofficeWasm,
       sofficeData,
-      pthreadWorkerMode,
-      sofficeWorkerJs,
     });
     self.Module = withEmscriptenStartupPolicy({
-      // Tell pthread workers where to load the main module from
-      mainScriptUrlOrBlob: sofficeJs,
       locateFile: (path: string, _scriptDir?: string) => {
         const result = locateBrowserRuntimeFile(path, runtimePaths);
         console.log('[Worker] locateFile called:', path, 'scriptDir:', _scriptDir, '-> result:', result);
@@ -946,7 +936,7 @@ async function handleRenderPreviews(msg: WorkerMessage) {
       // Render the page - let renderPage handle page selection and sizing
       const rendered = lokBindings.renderPage(docPtr, i, maxWidth);
 
-      // Copy from SharedArrayBuffer to regular ArrayBuffer
+      // Copy into an owned ArrayBuffer
       const dataCopy = new Uint8Array(rendered.data.length);
       dataCopy.set(rendered.data);
 
@@ -1023,7 +1013,7 @@ async function handleRenderSinglePage(msg: WorkerMessage) {
     const rendered = lokBindings.renderPage(docPtr, pageIndex, maxWidth);
     console.log(`[Worker] handleRenderSinglePage: renderPage returned ${rendered.data.length} bytes (${rendered.width}x${rendered.height})`);
 
-    // Copy from SharedArrayBuffer to regular ArrayBuffer
+    // Copy into an owned ArrayBuffer
     const dataCopy = new Uint8Array(rendered.data.length);
     dataCopy.set(rendered.data);
 
@@ -1050,7 +1040,7 @@ async function handleRenderSinglePage(msg: WorkerMessage) {
       console.log(`[Worker] handleRenderSinglePage: Destroyed view ${viewId} (on error)`);
     }
 
-    // Convert error message to a regular string (not SharedArrayBuffer-backed)
+    // Convert error message to a regular string
     const errorMsg = error instanceof Error ? String(error.message) : String(error);
     postResponse({
       type: 'error',
@@ -1122,7 +1112,7 @@ async function handleRenderPageViaConvert(msg: WorkerMessage) {
       throw new Error('PNG export produced empty output');
     }
 
-    // Copy from SharedArrayBuffer
+    // Copy into an owned ArrayBuffer
     const pngCopy = new Uint8Array(pngData.length);
     pngCopy.set(pngData);
 
@@ -1197,7 +1187,7 @@ async function handleRenderPageFullQuality(msg: WorkerMessage) {
     const rendered = lokBindings.renderPageFullQuality(docPtr, pageIndex, dpi, maxDimension, editMode);
     console.log(`[Worker] handleRenderPageFullQuality: rendered ${rendered.data.length} bytes (${rendered.width}x${rendered.height} at ${rendered.dpi} DPI)`);
 
-    // Copy from SharedArrayBuffer to regular ArrayBuffer
+    // Copy into an owned ArrayBuffer
     const dataCopy = new Uint8Array(rendered.data.length);
     dataCopy.set(rendered.data);
 
@@ -1746,7 +1736,7 @@ async function handleRenderPageRectangles(msg: WorkerMessage) {
         rect.height
       );
 
-      // Copy from SharedArrayBuffer to regular ArrayBuffer
+      // Copy into an owned ArrayBuffer
       const dataCopy = new Uint8Array(data.length);
       dataCopy.set(data);
 
@@ -2453,9 +2443,6 @@ function handleDestroy(msg: WorkerMessage) {
     try { lokBindings.destroy(); } catch { /* ignore */ }
     lokBindings = null;
   }
-
-  // PThread may be a throwing Emscripten accessor when it was not exported.
-  terminateExportedPThreads(module);
 
   module = null;
   initialized = false;

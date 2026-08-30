@@ -89,7 +89,7 @@ It runs entirely in Node.js without any native dependencies.\par
   console.log('✓ Done!');
   console.log('─────────────────────────────────────────');
   
-  // Note: WASM pthread workers keep the process alive.
+  // Exit after the one-shot example completes.
   // In production, either call process.exit() or use worker_threads
   // to run conversions in a subprocess that can be terminated.
   process.exit(0);

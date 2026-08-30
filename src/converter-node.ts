@@ -54,24 +54,6 @@ import {
   readExactConvertedOutput,
 } from './conversion-output.js';
 
-/** Emscripten worker with Node.js-specific methods */
-interface EmscriptenWorker {
-  unref?: () => void;
-  terminate?: () => void;
-}
-
-/** Emscripten PThread interface for pthread cleanup */
-interface EmscriptenPThread {
-  terminateAllThreads?: () => void;
-  runningWorkers?: EmscriptenWorker[];
-  unusedWorkers?: EmscriptenWorker[];
-}
-
-/** Emscripten module with PThread support */
-interface EmscriptenModuleWithPThread extends EmscriptenModule {
-  PThread?: EmscriptenPThread;
-}
-
 /** Node.js process handle */
 interface ProcessHandle {
   unref?: () => void;
@@ -120,40 +102,11 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       msg.includes('null function');
   }
 
-  private terminatePThreads(module: EmscriptenModule | null): void {
-    if (!module) return;
-
-    try {
-      const mod = module as EmscriptenModuleWithPThread;
-      mod.PThread?.terminateAllThreads?.();
-
-      for (const worker of mod.PThread?.runningWorkers ?? []) {
-        worker?.unref?.();
-        worker?.terminate?.();
-      }
-      if (mod.PThread?.runningWorkers) {
-        mod.PThread.runningWorkers = [];
-      }
-
-      for (const worker of mod.PThread?.unusedWorkers ?? []) {
-        worker?.unref?.();
-        worker?.terminate?.();
-      }
-      if (mod.PThread?.unusedWorkers) {
-        mod.PThread.unusedWorkers = [];
-      }
-    } catch {
-      // A poisoned runtime is discarded even if thread termination reports an error.
-    }
-  }
-
   private quarantineRuntime(): void {
-    const module = this.module;
     this.initialized = false;
     this.corrupted = true;
     this.lokBindings = null;
     this.module = null;
-    this.terminatePThreads(module);
 
     if (this.options.verbose) {
       console.log('[LibreOfficeConverter] Native conversion runtime quarantined');
@@ -1580,9 +1533,6 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       }
       this.lokBindings = null;
     }
-
-    // Terminate Emscripten pthread workers to allow process to exit.
-    this.terminatePThreads(this.module);
 
     // In Node.js, unref any remaining handles to allow process exit
     if (typeof process !== 'undefined') {

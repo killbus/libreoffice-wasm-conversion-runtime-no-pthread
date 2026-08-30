@@ -5,6 +5,10 @@ const patch = readFileSync(
   new URL('../build/patches/wasm-native-conversion-bridge.patch', import.meta.url),
   'utf8'
 );
+const noPthreadPatch = readFileSync(
+  new URL('../build/patches/wasm-no-pthread-single-profile.patch', import.meta.url),
+  'utf8'
+);
 const buildScript = readFileSync(
   new URL('../build/build-wasm.sh', import.meta.url),
   'utf8'
@@ -185,10 +189,14 @@ describe('native conversion source and build gates', () => {
 
     const cleanupIndex = workflow.indexOf('rm -f wasm/soffice.*');
     const buildIndex = workflow.indexOf('bash build/build-wasm.sh');
-    const uploadIndex = workflow.indexOf('- name: Upload WASM artifacts');
+    const verifyIndex = workflow.indexOf('- name: Verify no-pthread runtime contract');
+    const conversionGateIndex = workflow.indexOf('- name: Run fresh native conversion gate');
+    const uploadIndex = workflow.indexOf('- name: Upload no-pthread WASM artifacts');
     expect(cleanupIndex).toBeGreaterThan(-1);
     expect(cleanupIndex).toBeLessThan(buildIndex);
-    expect(buildIndex).toBeLessThan(uploadIndex);
+    expect(buildIndex).toBeLessThan(verifyIndex);
+    expect(verifyIndex).toBeLessThan(conversionGateIndex);
+    expect(conversionGateIndex).toBeLessThan(uploadIndex);
   });
 
   it('does not fetch obsolete LFS bytes before rebuilding native assets', () => {
@@ -197,7 +205,12 @@ describe('native conversion source and build gates', () => {
     expect(workflow).not.toContain('run: npm run build\n');
   });
 
-  it('applies exactly exports, shims, then bridge without later trim atoms', () => {
+  it('pins LibreOffice and applies exports, shims, bridge, then no-pthread', () => {
+    expect(buildScript).toContain(
+      'LIBREOFFICE_COMMIT="${LIBREOFFICE_COMMIT:-d1c9e0e4e1ddeb24fe8f93e56860b3765043f8b1}"'
+    );
+    expect(buildScript).toContain('git checkout --detach "${LIBREOFFICE_COMMIT}"');
+
     const atomNames = [...buildScript.matchAll(
       /apply_conversion_atom\s+\\\s*\r?\n\s*"([^"]+)"/g
     )].map((match) => match[1]);
@@ -207,5 +220,54 @@ describe('native conversion source and build gates', () => {
       'wasm-trim-lok-shims-conversion-only.patch',
       'wasm-native-conversion-bridge.patch',
     ]);
+
+    const bridgeIndex = buildScript.indexOf('"wasm-native-conversion-bridge.patch"');
+    const noPthreadIndex = buildScript.indexOf('"wasm-no-pthread-single-profile.patch"');
+    const configureIndex = buildScript.indexOf('./autogen.sh');
+    expect(bridgeIndex).toBeGreaterThan(-1);
+    expect(noPthreadIndex).toBeGreaterThan(bridgeIndex);
+    expect(configureIndex).toBeGreaterThan(noPthreadIndex);
+  });
+
+  it('removes native pthread flags and serializes Emscripten thread-pool work', () => {
+    const touchedFiles = [...noPthreadPatch.matchAll(
+      /^diff --git a\/(\S+) b\/(\S+)$/gm
+    )].map((match) => {
+      expect(match[2]).toBe(match[1]);
+      return match[1];
+    });
+
+    expect(touchedFiles).toEqual([
+      'solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk',
+      'comphelper/source/misc/threadpool.cxx',
+      'desktop/source/lib/init.cxx',
+    ]);
+    const removedLines = noPthreadPatch
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('-') && !line.startsWith('---'))
+      .join('\n');
+    for (const flag of [
+      '-pthread',
+      'USE_PTHREADS',
+      'DEFAULT_PTHREAD_STACK_SIZE',
+      'PTHREAD_POOL_SIZE',
+      'PROXY_TO_PTHREAD',
+    ]) {
+      expect(removedLines).toContain(flag);
+    }
+    expect(noPthreadPatch).toContain('+    pTask->mpTag->onTaskPushed();');
+    expect(noPthreadPatch).toContain('+    std::shared_ptr<ThreadTaskTag> pTag(pTask->mpTag);');
+    expect(noPthreadPatch).toContain('+    pTask->exec();');
+    expect(noPthreadPatch).toContain('+    pTag->onTaskWorkerDone();');
+    expect(noPthreadPatch).toContain('+    if (pLib->maThread)');
+  });
+
+  it('inspects generated native output before packaging it', () => {
+    const inspectIndex = buildScript.indexOf('inspect-no-pthread-runtime.mjs');
+    const copyIndex = buildScript.indexOf('cp "${ARTIFACT_DIR}/soffice.wasm"');
+    expect(inspectIndex).toBeGreaterThan(-1);
+    expect(copyIndex).toBeGreaterThan(inspectIndex);
+    expect(workflow).toContain('run: npm run verify:no-pthread');
+    expect(workflow).toContain('name: soffice-wasm-no-pthread-${{ github.run_id }}');
   });
 });

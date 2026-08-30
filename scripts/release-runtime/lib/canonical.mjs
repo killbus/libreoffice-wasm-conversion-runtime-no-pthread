@@ -44,8 +44,7 @@ export function deriveCandidateIdentity(input) {
       },
     },
     runtime: {
-      pthreadWorkerMode: input.runtime.pthreadWorkerMode,
-      externalWorker: input.runtime.externalWorker ?? null,
+      threading: input.runtime.threading,
     },
     assets: input.assets
       .map(({ path, role, mimeType, bytes, sha256 }) => ({

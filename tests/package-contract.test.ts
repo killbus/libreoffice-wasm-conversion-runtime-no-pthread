@@ -166,7 +166,7 @@ describe('browser asset deployment contract', () => {
     expect(LIBREOFFICE_BROWSER_ASSET_CONTRACT).toEqual({
       schemaVersion: 1,
       packageName: '@killbus/libreoffice-converter',
-      pthreadWorkerMode: 'main-script',
+      threading: 'none',
       assets: {
         browserWorkerJs: {
           key: 'browserWorkerJs',

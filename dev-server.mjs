@@ -19,10 +19,6 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  // Required headers for SharedArrayBuffer (WASM threads)
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
-
   let filePath = path.join(__dirname, req.url === '/' ? '/examples/browser-demo.html' : req.url);
   const ext = path.extname(filePath);
 
@@ -51,8 +47,6 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`\n🚀 Dev server running at http://localhost:${PORT}`);
   console.log(`   Demo page: http://localhost:${PORT}/examples/browser-demo.html`);
-  console.log(`\n   Headers enabled:`);
-  console.log(`   - Cross-Origin-Opener-Policy: same-origin`);
-  console.log(`   - Cross-Origin-Embedder-Policy: require-corp`);
+  console.log(`   Cross-origin isolation intentionally disabled for no-pthread testing`);
   console.log(`\n   Press Ctrl+C to stop\n`);
 });

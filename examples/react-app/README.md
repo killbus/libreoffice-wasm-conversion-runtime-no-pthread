@@ -77,11 +77,7 @@ function useConverter() {
 
 ## Important Notes
 
-1. **CORS Headers Required**: Your server must send these headers for SharedArrayBuffer:
-   - `Cross-Origin-Opener-Policy: same-origin`
-   - `Cross-Origin-Embedder-Policy: require-corp`
-
-   The Vite config in this example already includes these headers.
+1. **No isolation headers required**: the bundled runtime is compiled without pthread support.
 
 2. **WASM Files**: Copy the `wasm/` folder to your public directory.
 

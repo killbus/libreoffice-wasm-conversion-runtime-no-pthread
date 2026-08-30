@@ -25,7 +25,6 @@ const COMMIT_PATTERN = /^[0-9a-f]{40}$/
 const SHA256_PATTERN = /^[0-9a-f]{64}$/
 const RUN_ID_PATTERN = /^[1-9][0-9]*$/
 const ABI_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
-const PTHREAD_WORKER_MODES = new Set(['external', 'main-script'])
 const ASSET_ROLES = new Set([
   'browserModule',
   'browserTypes',
@@ -35,7 +34,6 @@ const ASSET_ROLES = new Set([
   'browserGlue',
   'wasmBinary',
   'filesystemData',
-  'pthreadWorker',
   'controlFile',
   'payloadArchive',
   'stagingReport',
@@ -114,25 +112,14 @@ export function normalizeProvenance(provenance) {
 }
 
 export function normalizeRuntime(runtime) {
-  const mode = expectString(runtime?.pthreadWorkerMode, 'pthreadWorkerMode')
-  if (!PTHREAD_WORKER_MODES.has(mode)) {
-    throw new SchemaError(
-      'pthreadWorkerMode must be either external or main-script'
-    )
+  const threading = expectString(runtime?.threading, 'runtime threading')
+  if (threading !== 'none') {
+    throw new SchemaError('runtime threading must be none')
   }
-  const externalWorker = runtime?.externalWorker ?? null
-  if (mode === 'external') {
-    if (typeof externalWorker !== 'string' || externalWorker.trim().length === 0) {
-      throw new SchemaError(
-        'external pthread mode requires a non-empty externalWorker path'
-      )
-    }
-  } else if (externalWorker !== null) {
-    throw new SchemaError(
-      'main-script pthread mode requires externalWorker to be null'
-    )
+  if ('pthreadWorkerMode' in runtime || 'externalWorker' in runtime) {
+    throw new SchemaError('legacy pthread runtime metadata is not accepted')
   }
-  return { pthreadWorkerMode: mode, externalWorker }
+  return { threading }
 }
 
 export function expectAsset(asset, { requireSource = true } = {}) {

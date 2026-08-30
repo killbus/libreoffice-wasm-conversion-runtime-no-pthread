@@ -39,7 +39,6 @@ import {
   resolveSingleResultFilterOptions,
 } from './types.js';
 import { LOKBindings } from './lok-bindings.js';
-import { terminateExportedPThreads } from './emscripten-pthread.js';
 import { withEmscriptenStartupPolicy } from './emscripten-startup-policy.js';
 import {
   NativeConversionError,
@@ -94,17 +93,12 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
            msg.includes('null function');
   }
 
-  private terminatePThreads(module: EmscriptenModule | null): void {
-    terminateExportedPThreads(module);
-  }
 
   private quarantineRuntime(): void {
-    const module = this.module;
     this.initialized = false;
     this.corrupted = true;
     this.lokBindings = null;
     this.module = null;
-    this.terminatePThreads(module);
 
     if (this.options.verbose) {
       console.log('[LibreOfficeConverter] Native conversion runtime quarantined');
@@ -1605,9 +1599,6 @@ export class LibreOfficeConverter implements ILibreOfficeConverter {
       }
       this.lokBindings = null;
     }
-
-    // Terminate Emscripten pthread workers.
-    this.terminatePThreads(this.module);
 
     this.module = null;
     this.initialized = false;

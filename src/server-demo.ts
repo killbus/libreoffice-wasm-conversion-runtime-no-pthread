@@ -130,8 +130,6 @@ async function serveStatic(res: ServerResponse, filePath: string): Promise<boole
     res.writeHead(200, {
       'Content-Type': contentType,
       'Content-Length': content.length,
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
     });
     res.end(content);
     return true;

@@ -166,6 +166,6 @@ if (failed.length > 0) {
 
 console.log('');
 
-// Clean exit (required due to LibreOffice pthread workers)
+// Clean exit after releasing the converter runtime
 await converter.destroy();
 process.exit(0);

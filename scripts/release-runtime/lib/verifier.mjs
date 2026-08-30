@@ -4,8 +4,9 @@
 // anchor). It never trusts SHA256SUMS carried inside the archive.
 
 import { createHash } from 'node:crypto'
+import { inspectNoPthreadRuntime } from '../../inspect-no-pthread-runtime.mjs'
 import { mkdir, readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import {
   CANDIDATE_MANIFEST_FILE,
   ASSET_SHA256SUMS_FILE,
@@ -144,12 +145,11 @@ export async function verifyArchive(options) {
   ) {
     throw new VerifyError('provenance drift between manifest and frozen spec')
   }
-  if (
-    manifest.runtime.pthreadWorkerMode !== spec.runtime.pthreadWorkerMode ||
-    manifest.runtime.externalWorker !== spec.runtime.externalWorker
-  ) {
-    throw new VerifyError('pthread worker-mode drift between manifest and spec')
+  if (manifest.runtime.threading !== spec.runtime.threading) {
+    throw new VerifyError('runtime threading drift between manifest and spec')
   }
+
+  await inspectNoPthreadRuntime(join(extractRoot, 'wasm'))
 
   // 7. Recompute ASSET-SHA256SUMS from the verified manifest table.
   const expectedSums = `${manifest.assets
@@ -176,8 +176,7 @@ export async function verifyArchive(options) {
     tagName,
     abi: spec.provenance.native.abi,
     schemaVersion: spec.provenance.native.schemaVersion,
-    pthreadWorkerMode: spec.runtime.pthreadWorkerMode,
-    externalWorker: spec.runtime.externalWorker,
+    threading: spec.runtime.threading,
     runtimeAssets: recomputed,
     expectedTag: tagName,
     evidence: {

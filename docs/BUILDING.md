@@ -180,17 +180,12 @@ $(eval $(call gb_Module_add_l10n_targets,xmlsecurity,\
 EOF
 ```
 
-#### Patch 2: Add PROXY_TO_PTHREAD
+#### Patch 2: Enforce the no-pthread runtime
 
-Edit `solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk`:
-
-```bash
-# Find this line:
-gb_EMSCRIPTEN_LDFLAGS += -s TOTAL_MEMORY=1GB -s PTHREAD_POOL_SIZE=4
-
-# Change to:
-gb_EMSCRIPTEN_LDFLAGS += -s TOTAL_MEMORY=1GB -s PTHREAD_POOL_SIZE=4 -s PROXY_TO_PTHREAD=1
-```
+The final patch removes `-pthread`, `USE_PTHREADS`, `PTHREAD_POOL_SIZE`,
+`DEFAULT_PTHREAD_STACK_SIZE`, and `PROXY_TO_PTHREAD`. It also removes the
+internal worker auxiliary target and makes the Emscripten thread-pool path
+execute synchronously.
 
 #### Patch 3: Export Required Runtime Methods
 
@@ -274,10 +269,9 @@ cp instdir/program/soffice.js /path/to/project/wasm/soffice.cjs
 cp instdir/program/soffice.data /path/to/project/wasm/
 ```
 
-The current frozen browser profile uses main-script pthread bootstrap:
-`soffice.js` is supplied through `Module.mainScriptUrlOrBlob`. Do not copy or
-publish a standalone `soffice.worker.js`; a build that requires one is a
-different artifact profile and must receive a separate candidate identity.
+The browser profile is compiled without Emscripten pthread support. `soffice.js`
+is loaded directly inside the package-owned browser worker, and no nested
+LibreOffice worker is produced or deployed.
 
 ### Step 8: Apply Node.js Patches
 
@@ -382,22 +376,18 @@ sudo swapon /swapfile
 
 ### Glue requests `soffice.worker.js`
 
-**Cause:** The glue belongs to an external-worker artifact profile, not the
-current main-script profile.
+**Cause:** The generated glue was built with Emscripten pthread support and does
+not satisfy this fork's native artifact contract.
 
 **Solution:** Do not rename, synthesize, or fall back to a worker file. Rebuild
-the intended main-script profile and qualify the changed bytes under a new
-candidate identity, or define external-worker mode as a separate frozen profile.
+from the pinned source with the no-pthread patch stack, then qualify the changed
+bytes under a new candidate identity.
 
 ### Module blocks event loop
 
 **Cause:** WASM initialization blocks main thread.
 
-**Solution:** Add PROXY_TO_PTHREAD to linker flags:
-
-```bash
-gb_EMSCRIPTEN_LDFLAGS += -s PROXY_TO_PTHREAD=1
-```
+**Solution:** Rebuild from the pinned source with the no-pthread patch stack.
 
 ---
 
@@ -434,7 +424,7 @@ The build produces portable WASM that works everywhere. Platform-specific optimi
 
 **For Node.js servers:**
 - Use maximum memory: `-s TOTAL_MEMORY=2GB`
-- Enable threading: `-s PTHREAD_POOL_SIZE=8`
+- Keep the runtime single-threaded and scale with independent outer workers or processes
 
 **For browsers:**
 - Use streaming compilation
@@ -450,7 +440,7 @@ After a successful build, you'll have:
 | File | Size (approx) | Description |
 |------|---------------|-------------|
 | `soffice.wasm` | 148MB | Main WASM binary |
-| `soffice.js` | 440KB | Browser main-script pthread glue |
+| `soffice.js` | 440KB | Browser no-pthread Emscripten glue |
 | `soffice.cjs` | 440KB | Node.js glue code |
 | `soffice.data` | 100MB | Virtual filesystem |
 

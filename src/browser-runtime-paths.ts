@@ -5,14 +5,7 @@ import type {
   ResolvedBrowserWasmPaths,
 } from './types.js';
 
-type BrowserWasmPathInput = Pick<
-  BrowserConverterOptions,
-  keyof BrowserWasmCorePaths | 'pthreadWorkerMode' | 'sofficeWorkerJs'
->;
-
-type ResolvedPthreadWorkerPaths =
-  | { pthreadWorkerMode: 'external'; sofficeWorkerJs: string }
-  | { pthreadWorkerMode: 'main-script'; sofficeWorkerJs?: never };
+type BrowserWasmPathInput = Pick<BrowserConverterOptions, keyof BrowserWasmCorePaths>;
 
 const ARTIFACT_CONTRACT_PREFIX = 'LibreOffice browser runtime artifact contract violation';
 
@@ -23,85 +16,41 @@ function requireNonEmptyPath(name: string, value: unknown): string {
   return value;
 }
 
-function resolvePthreadWorkerPaths(
-  options: BrowserWasmPathInput
-): ResolvedPthreadWorkerPaths {
-  const mode = options.pthreadWorkerMode === undefined
-    ? 'main-script'
-    : options.pthreadWorkerMode;
-  if (mode !== 'external' && mode !== 'main-script') {
-    throw new Error(
-      `${ARTIFACT_CONTRACT_PREFIX}: unsupported pthreadWorkerMode ${JSON.stringify(mode)}`
-    );
-  }
-
-  if (mode === 'main-script') {
-    if (options.sofficeWorkerJs !== undefined) {
-      throw new Error(
-        `${ARTIFACT_CONTRACT_PREFIX}: sofficeWorkerJs must be omitted unless pthreadWorkerMode is explicitly "external"`
-      );
-    }
-    return { pthreadWorkerMode: 'main-script' };
-  }
-
+function resolveCorePaths(
+  options: BrowserWasmPathInput,
+  defaults?: BrowserWasmCorePaths
+): ResolvedBrowserWasmPaths {
   return {
-    pthreadWorkerMode: 'external',
-    sofficeWorkerJs: requireNonEmptyPath(
-      'sofficeWorkerJs',
-      options.sofficeWorkerJs
-    ),
+    sofficeJs: requireNonEmptyPath('sofficeJs', options.sofficeJs ?? defaults?.sofficeJs),
+    sofficeWasm: requireNonEmptyPath('sofficeWasm', options.sofficeWasm ?? defaults?.sofficeWasm),
+    sofficeData: requireNonEmptyPath('sofficeData', options.sofficeData ?? defaults?.sofficeData),
   };
 }
 
-/** Apply main-script browser defaults, then validate the selected artifact contract. */
+/** Apply no-pthread browser defaults and validate the artifact paths. */
 export function resolveBrowserWasmPaths(
   options: BrowserWasmPathInput = {}
 ): ResolvedBrowserWasmPaths {
-  const defaults = createWasmPaths();
-  const corePaths: BrowserWasmCorePaths = {
-    sofficeJs: requireNonEmptyPath('sofficeJs', options.sofficeJs ?? defaults.sofficeJs),
-    sofficeWasm: requireNonEmptyPath('sofficeWasm', options.sofficeWasm ?? defaults.sofficeWasm),
-    sofficeData: requireNonEmptyPath('sofficeData', options.sofficeData ?? defaults.sofficeData),
-  };
-  const pthreadPaths = resolvePthreadWorkerPaths(options);
-  return pthreadPaths.pthreadWorkerMode === 'external'
-    ? { ...corePaths, ...pthreadPaths }
-    : { ...corePaths, ...pthreadPaths };
+  return resolveCorePaths(options, createWasmPaths());
 }
 
-/** Validate the fully explicit paths received by the classic conversion Worker. */
+/** Validate the fully explicit paths received by the conversion Worker. */
 export function validateExplicitBrowserWasmPaths(
   options: BrowserWasmPathInput
 ): ResolvedBrowserWasmPaths {
-  const corePaths: BrowserWasmCorePaths = {
-    sofficeJs: requireNonEmptyPath('sofficeJs', options.sofficeJs),
-    sofficeWasm: requireNonEmptyPath('sofficeWasm', options.sofficeWasm),
-    sofficeData: requireNonEmptyPath('sofficeData', options.sofficeData),
-  };
-  const pthreadPaths = resolvePthreadWorkerPaths(options);
-  return pthreadPaths.pthreadWorkerMode === 'external'
-    ? { ...corePaths, ...pthreadPaths }
-    : { ...corePaths, ...pthreadPaths };
+  return resolveCorePaths(options);
 }
 
-export function isExternalPthreadWorkerRequest(path: string): boolean {
-  return path.includes('.worker.');
-}
-
-/** Resolve one Emscripten runtime request without guessing across artifact modes. */
+/** Resolve one Emscripten runtime request without allowing pthread sidecars. */
 export function locateBrowserRuntimeFile(
   path: string,
   paths: ResolvedBrowserWasmPaths
 ): string {
-  if (isExternalPthreadWorkerRequest(path)) {
-    if (paths.pthreadWorkerMode === 'main-script') {
-      throw new Error(
-        `${ARTIFACT_CONTRACT_PREFIX}: main-script pthread glue unexpectedly requested external worker ${JSON.stringify(path)}`
-      );
-    }
-    return paths.sofficeWorkerJs;
+  if (/\.worker\./.test(path)) {
+    throw new Error(
+      `${ARTIFACT_CONTRACT_PREFIX}: no-pthread glue unexpectedly requested worker ${JSON.stringify(path)}`
+    );
   }
-
   if (path.endsWith('.wasm')) return paths.sofficeWasm;
   if (path.endsWith('.data')) return paths.sofficeData;
 

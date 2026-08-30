@@ -69,18 +69,8 @@ function createHarness() {
     open: vi.fn(),
   };
 
-  const runningWorker = {
-    unref: vi.fn<() => void>(),
-    terminate: vi.fn<() => void>(),
-  };
-  const terminateAllThreads = vi.fn<() => void>();
   const module = {
     FS: fs as unknown as EmscriptenFS,
-    PThread: {
-      terminateAllThreads,
-      runningWorkers: [runningWorker],
-      unusedWorkers: [],
-    },
   } as unknown as EmscriptenModule;
 
   const nativeConvert = vi.fn<
@@ -127,8 +117,6 @@ function createHarness() {
     documentLoadWithOptions,
     documentSaveAs,
     documentDestroy,
-    terminateAllThreads,
-    runningWorker,
   };
 }
 
@@ -516,7 +504,7 @@ describe('native basic conversion path', () => {
     }
   );
 
-  it('quarantines an uncertain-cleanup runtime and terminates its PThreads', async () => {
+  it('quarantines an uncertain-cleanup runtime', async () => {
     const harness = createHarness();
     harness.nativeConvert.mockReturnValue({
       schemaVersion: 1,
@@ -535,9 +523,6 @@ describe('native basic conversion path', () => {
     expect(harness.converter.isReady()).toBe(false);
     expect(harness.converter.getModule()).toBeNull();
     expect(harness.converter.getLokBindings()).toBeNull();
-    expect(harness.terminateAllThreads).toHaveBeenCalledOnce();
-    expect(harness.runningWorker.unref).toHaveBeenCalledOnce();
-    expect(harness.runningWorker.terminate).toHaveBeenCalledOnce();
   });
 
   it('keeps PNG conversion on the legacy raw document-pointer path', async () => {

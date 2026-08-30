@@ -67,7 +67,7 @@
   ],
   "scripts": {
     "build": "node scripts/build-package.mjs",
-    "build:wasm": "bash build/build-native.sh",
+    "build:wasm": "bash build/build-wasm.sh",
     "dev": "tsx watch src/server.ts",
     "dev:browser": "node dev-server.mjs",
     "start": "node dist/server.js",
@@ -82,7 +82,8 @@
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepack": "node scripts/build-package.mjs --silent"
+    "prepack": "node scripts/build-package.mjs --silent",
+    "verify:no-pthread": "node scripts/inspect-no-pthread-runtime.mjs wasm"
   },
   "keywords": [
     "libreoffice",

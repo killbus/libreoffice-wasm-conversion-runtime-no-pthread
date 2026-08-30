@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LibreOffice WASM assets — CDN</title>
 <meta name="description" content="Cross-origin CDN for the @matbee/libreoffice-converter browser runtime: LibreOffice WASM assets served with CORS for in-browser document conversion. Includes a live demo.">
-<!-- Enables cross-origin isolation (SharedArrayBuffer) on hosts that can't send
-     COOP/COEP headers, e.g. GitHub Pages. No-op when headers are already set. -->
-<script src="coi-serviceworker.js"></script>
 <style>
 	:root {
 		--bg: #ffffff; --fg: #1b1f23; --muted: #5b636b; --border: #e6e8eb; --card: #f6f8fa;
@@ -128,7 +125,7 @@
 <span class="k">const</span> CDN = '__ORIGIN__';
 
 <span class="k">const</span> converter = <span class="k">new</span> WorkerBrowserConverter({
-  ...createWasmPaths('/wasm/'),               <span class="c">// main-script pthread glue: same-origin</span>
+  ...createWasmPaths('/wasm/'),               <span class="c">// no-pthread runtime assets</span>
   sofficeWasm: `${CDN}/wasm/soffice.wasm`,     <span class="c">// ≈140 MB from the CDN</span>
   sofficeData: `${CDN}/wasm/soffice.data`,     <span class="c">// ≈95 MB from the CDN</span>
 });
@@ -150,8 +147,8 @@
 	</section>
 
 	<section>
-		<h2>Requirements</h2>
-		<p class="note"><b>Cross-origin isolation.</b> The converter uses <code>SharedArrayBuffer</code>, so the page that runs it must be served with <code>Cross-Origin-Opener-Policy: same-origin</code> and <code>Cross-Origin-Embedder-Policy: require-corp</code> (or <code>credentialless</code>). GitHub Pages can't set these, so this page uses a <a href="https://github.com/gzuidhof/coi-serviceworker">service worker</a> to enable isolation client-side; in your own app, set the headers on the server.</p>
+		<h2>Runtime model</h2>
+		<p class="note"><b>No pthreads.</b> Conversion runs in the package-owned Web Worker and does not require cross-origin isolation headers.</p>
 	</section>
 
 	<footer>
@@ -215,9 +212,6 @@
 
 	async function getConverter() {
 		if (converter) return converter;
-		if (!self.crossOriginIsolated) {
-			throw new Error('Cross-origin isolation is not active, so SharedArrayBuffer is unavailable. Reload the page; if it persists, your browser blocks the service worker.');
-		}
 		converter = new WorkerBrowserConverter({
 			...createWasmPaths(BASE + 'wasm/'),
 			browserWorkerJs: BASE + 'dist/browser.worker.global.js',

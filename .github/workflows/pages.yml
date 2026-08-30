@@ -94,10 +94,8 @@ jobs:
           touch _site/.nojekyll
           # Version marker (the landing page fetches this to show the version).
           printf '{ "version": "%s" }\n' "$VERSION" > _site/version.json
-          # Landing page + demo (source: pages/). Includes the coi-serviceworker
-          # so the demo's SharedArrayBuffer works on GitHub Pages (no COOP/COEP).
+          # Landing page + demo (source: pages/). No cross-origin isolation shim is needed.
           cp pages/index.html _site/index.html
-          cp pages/coi-serviceworker.js _site/coi-serviceworker.js
           echo "Assembled site:"
           du -sh _site
           du -h _site/wasm/soffice.wasm _site/wasm/soffice.data

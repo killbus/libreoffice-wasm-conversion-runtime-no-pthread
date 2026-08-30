@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Real-Chromium downloaded-byte Worker/pthread acceptance. Serves only the
-// explicit candidate assets with COOP/COEP and records every runtime request.
+// Real-Chromium no-pthread acceptance. Serves explicit candidate assets without
+// cross-origin isolation and records every runtime request.
 
 import http from 'node:http'
 import { createHash } from 'node:crypto'
@@ -62,7 +62,6 @@ try {
     sofficeJs: '/wasm/soffice.js',
     sofficeWasm: '/wasm/soffice.wasm',
     sofficeData: '/wasm/soffice.data',
-    pthreadWorkerMode: 'main-script',
   });
   const facadeKeys = Object.keys(converter).sort();
   const frozen = Object.isFrozen(converter);
@@ -121,9 +120,6 @@ async function main(argv) {
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
     serverRequests.push(pathname)
-    response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
-    response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
-    response.setHeader('Cross-Origin-Resource-Policy', 'same-origin')
     const asset = assets.get(pathname)
     if (!asset) {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
@@ -195,8 +191,8 @@ async function main(argv) {
   const passed =
     !gateError &&
     pageResult?.status === 'passed' &&
-    pageResult?.crossOriginIsolated === true &&
-    pageResult?.sharedArrayBuffer === true &&
+    pageResult?.crossOriginIsolated === false &&
+    pageResult?.sharedArrayBuffer === false &&
     pageResult?.frozen === true &&
     JSON.stringify(pageResult?.facadeKeys) ===
       JSON.stringify(['convert', 'destroy', 'initialize', 'isReady']) &&
@@ -207,11 +203,12 @@ async function main(argv) {
     standaloneWorkerRequests.length === 0 &&
     serverRequests.includes('/wasm/soffice.wasm') &&
     serverRequests.includes('/wasm/soffice.data') &&
-    sofficeJsRequests >= 2
+    sofficeJsRequests === 1 &&
+    workerUrls.every((url) => new URL(url).pathname === '/dist/browser.worker.global.js')
 
   const evidence = {
     schemaVersion: 1,
-    gate: 'real-browser-worker-main-script',
+    gate: 'real-browser-worker-no-pthread',
     status: passed ? 'passed' : 'failed',
     pageResult,
     gateError,

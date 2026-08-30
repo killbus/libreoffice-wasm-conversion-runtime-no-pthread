@@ -1,0 +1,113 @@
+diff --git a/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk b/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
+--- a/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
++++ b/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
+@@ -11,15 +11,12 @@
+ 
+ gb_RUN_CONFIGURE := $(SRCDIR)/solenv/bin/run-configure
+ # avoid -s SAFE_HEAP=1 - c.f. gh#8584 this breaks source maps
+-gb_EMSCRIPTEN_CPPFLAGS := -pthread -s USE_PTHREADS=1 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -s SUPPORT_LONGJMP=wasm
++gb_EMSCRIPTEN_CPPFLAGS := -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -s SUPPORT_LONGJMP=wasm
+ gb_EMSCRIPTEN_LDFLAGS := $(gb_EMSCRIPTEN_CPPFLAGS)
+ 
+-# Initial memory size and worker thread pool
+-# ALLOW_MEMORY_GROWTH enables heap expansion beyond INITIAL_MEMORY
+-# STACK_SIZE increased from default 64KB to 5MB for complex call stacks
+-# DEFAULT_PTHREAD_STACK_SIZE sets worker thread stack size
++# Initial memory and stack configuration.
+ # Production build: debug flags (SAFE_HEAP, STACK_OVERFLOW_CHECK, DEMANGLE_SUPPORT) removed for performance
+-gb_EMSCRIPTEN_LDFLAGS += -s INITIAL_MEMORY=1GB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=5MB -s DEFAULT_PTHREAD_STACK_SIZE=2MB -s PTHREAD_POOL_SIZE=4 -s PROXY_TO_PTHREAD=1
++gb_EMSCRIPTEN_LDFLAGS += -s INITIAL_MEMORY=1GB -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=5MB
+ 
+ # To keep the link time (and memory) down, prevent all rewriting options from wasm-emscripten-finalize
+ # See emscripten.py, finalize_wasm, modify_wasm = True
+@@ -31,7 +28,7 @@
+ gb_EMSCRIPTEN_EXCEPT = -fwasm-exceptions -s SUPPORT_LONGJMP=wasm
+ 
+ # LOK EXPORTED_FUNCTIONS live in desktop/Executable_soffice_bin.mk only.
+-# Primary executable extension stays .html (emscripten aux: .js/.wasm/.worker.js).
++# Primary executable extension stays .html (Emscripten aux: .js/.wasm).
+ 
+ gb_CXXFLAGS += $(gb_EMSCRIPTEN_CPPFLAGS)
+ 
+@@ -71,7 +68,6 @@
+         $(patsubst %.lib,%.linkdeps,$(3)) \
+         $(patsubst %.lib,%.wasm,$(3)) \
+         $(patsubst %.lib,%.js,$(3)) \
+-        $(patsubst %.lib,%.worker.js,$(3)) \
+         $(patsubst %.lib,%.wasm.dwp,$(3)) \
+ )
+ 
+@@ -82,7 +78,6 @@
+         $(patsubst %.lib,%.linkdeps,$(3)) \
+         $(patsubst %.lib,%.wasm,$(3)) \
+         $(patsubst %.lib,%.js,$(3)) \
+-        $(patsubst %.lib,%.worker.js,$(3)) \
+         $(patsubst %.lib,%.wasm.dwp,$(3)) \
+ )
+ 
+diff --git a/comphelper/source/misc/threadpool.cxx b/comphelper/source/misc/threadpool.cxx
+--- a/comphelper/source/misc/threadpool.cxx
++++ b/comphelper/source/misc/threadpool.cxx
+@@ -136,9 +136,8 @@
+     static std::size_t ThreadCount = []()
+     {
+ #ifdef __EMSCRIPTEN__
+-        // Force single-threaded mode for WASM to avoid deadlocks when
+-        // spawning new threads during rendering (Chromium pthread limitation)
+-        SAL_INFO("comphelper.threadpool", "WASM build: forcing single-threaded mode");
++        // Emscripten tasks run synchronously in pushTask().
++        SAL_INFO("comphelper.threadpool", "WASM build: using synchronous task execution");
+         return std::size_t(1);
+ #else
+         const std::size_t nHardThreads = o3tl::clamp_to_unsigned<std::size_t>(
+@@ -220,6 +219,12 @@
+ 
+ void ThreadPool::pushTask( std::unique_ptr<ThreadTask> pTask )
+ {
++#ifdef __EMSCRIPTEN__
++    pTask->mpTag->onTaskPushed();
++    std::shared_ptr<ThreadTaskTag> pTag(pTask->mpTag);
++    pTask->exec();
++    pTag->onTaskWorkerDone();
++#else
+     std::scoped_lock< std::mutex > aGuard( maMutex );
+ 
+     mbTerminate = false;
+@@ -235,6 +240,7 @@
+     maTasks.insert( maTasks.begin(), std::move(pTask) );
+ 
+     maTasksChanged.notify_one();
++#endif
+ }
+ 
+ std::unique_ptr<ThreadTask> ThreadPool::popWorkLocked( std::unique_lock< std::mutex > & rGuard, bool bWait )
+diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
+--- a/desktop/source/lib/init.cxx
++++ b/desktop/source/lib/init.cxx
+@@ -8877,10 +8877,8 @@
+     // Did we do a pre-initialize
+     static bool bPreInited = false;
+ #ifdef __EMSCRIPTEN__
+-    // Force unipoll mode for Emscripten/WASM builds.
+-    // With PROXY_TO_PTHREAD=1, main() already runs on a pthread worker.
+-    // Creating additional threads with osl_createThread causes conflicts.
+-    // Unipoll mode keeps everything on the same thread, avoiding the issue.
++    // Emscripten runs LibreOfficeKit synchronously on its owning worker.
++    // Unipoll avoids creating an internal office thread.
+     static bool bUnipoll = true;
+ #else
+     static bool bUnipoll = false;
+@@ -9329,8 +9327,11 @@
+ 
+     aGuard.clear();
+ 
+-    osl_joinWithThread(pLib->maThread);
+-    osl_destroyThread(pLib->maThread);
++    if (pLib->maThread)
++    {
++        osl_joinWithThread(pLib->maThread);
++        osl_destroyThread(pLib->maThread);
++    }
+ 
+     delete pLib;
+     bInitialized = false;

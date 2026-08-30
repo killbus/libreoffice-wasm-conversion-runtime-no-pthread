@@ -25,7 +25,7 @@
     <strong>Note:</strong> This test loads WASM directly on the main thread (using <code>BrowserConverter</code> instead of <code>WorkerBrowserConverter</code>).
     The UI will be blocked during initialization (~80s) and conversions (~5-10s each).
     <br><br>
-    With Emscripten 3.1.58+, pthread workers are inlined - no separate worker file needed for the WASM pthreads.
+    This build has no Emscripten pthread workers; use the worker-based converter to keep the UI responsive.
   </div>
 
   <div class="section">
@@ -69,13 +69,7 @@
 
     // Check browser capabilities
     console.log('=== Browser Capability Check ===');
-    console.log('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
-    console.log('crossOriginIsolated:', window.crossOriginIsolated);
-    console.log('User Agent:', navigator.userAgent);
-
-    if (!window.crossOriginIsolated) {
-      console.warn('crossOriginIsolated is false - WASM threads may not work');
-    }
+    console.log('crossOriginIsolated (not required):', window.crossOriginIsolated);
 
     let converter = null;
 

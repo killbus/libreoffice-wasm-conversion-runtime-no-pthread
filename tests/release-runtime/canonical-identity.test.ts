@@ -7,7 +7,7 @@ import { validateFrozenSpec } from '../../scripts/release-runtime/lib/schemata.m
 
 // Frozen identity from research/artifact-provenance.md.
 const FROZEN_CANDIDATE_ID =
-  '21fcdfd7e9f49efc08c6ba56c13337cc0be59a9b496f5424adbe57e0fb4a6e7b'
+  '85b6fb0e3f50570d085547f997eaa7584e5e49d076cd584639f31f51cecc4ad6'
 
 const FROZEN_ASSETS = [
   { path: 'dist/browser.d.ts', role: 'browserTypes', mimeType: 'text/plain', bytes: 71783, sha256: '73d0f6ab719d0f643d38fc1839be295f0aed4cb09a8c8cb8f054d65a224f63fb' },
@@ -32,7 +32,7 @@ const FROZEN_PROVENANCE = {
   },
 }
 
-const FROZEN_RUNTIME = { pthreadWorkerMode: 'main-script', externalWorker: null }
+const FROZEN_RUNTIME = { threading: 'none' }
 
 function identity(assets = FROZEN_ASSETS, provenance = FROZEN_PROVENANCE, runtime = FROZEN_RUNTIME) {
   return deriveCandidateIdentity({ provenance, runtime, assets })
@@ -63,10 +63,10 @@ describe('frozen candidate-ID derivation', () => {
     expect(identity(undefined, { ...FROZEN_PROVENANCE, wrapper: { commit: '0000000000000000000000000000000000000002' } })).not.toBe(FROZEN_CANDIDATE_ID)
   })
 
-  it('treats ABI/schema/pthread drift as a new candidate', () => {
+  it('treats ABI/schema/runtime drift as a new candidate', () => {
     expect(identity(undefined, { ...FROZEN_PROVENANCE, native: { ...FROZEN_PROVENANCE.native, abi: 'lok-convert-document-v2' } })).not.toBe(FROZEN_CANDIDATE_ID)
     expect(identity(undefined, { ...FROZEN_PROVENANCE, native: { ...FROZEN_PROVENANCE.native, schemaVersion: 2 } })).not.toBe(FROZEN_CANDIDATE_ID)
-    expect(identity(undefined, undefined, { pthreadWorkerMode: 'external', externalWorker: 'wasm/soffice.worker.js' })).not.toBe(FROZEN_CANDIDATE_ID)
+    expect(identity(undefined, undefined, { threading: 'future-model' })).not.toBe(FROZEN_CANDIDATE_ID)
   })
 
   it('keeps runtime/path/role identity fields but never source roots or timestamps', () => {
@@ -90,16 +90,12 @@ describe('frozen candidate-ID derivation', () => {
 })
 
 describe('frozen spec schema', () => {
-  it('accepts the checked-in candidate spec', async () => {
+  it('rejects the checked-in legacy threaded candidate spec', async () => {
     const { readFile } = await import('node:fs/promises')
     const { resolve } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
     const specPath = resolve(fileURLToPath(import.meta.url), '../../../scripts/release-runtime/candidate-spec.json')
-    const spec = validateFrozenSpec(JSON.parse(await readFile(specPath, 'utf8')))
-    expect(spec.candidateId).toBe(FROZEN_CANDIDATE_ID)
-    expect(spec.assets).toHaveLength(8)
-    for (const asset of spec.assets) {
-      expect(asset.path).not.toContain('soffice.worker.js')
-    }
+    const legacySpec = JSON.parse(await readFile(specPath, 'utf8'))
+    expect(() => validateFrozenSpec(legacySpec)).toThrow(/runtime threading|legacy pthread/)
   })
 })
