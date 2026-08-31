@@ -155,7 +155,14 @@ diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
 diff --git a/toolkit/source/awt/vclxtoolkit.cxx b/toolkit/source/awt/vclxtoolkit.cxx
 --- a/toolkit/source/awt/vclxtoolkit.cxx
 +++ b/toolkit/source/awt/vclxtoolkit.cxx
-@@ -928,9 +928,10 @@ VCLXToolkit::VCLXToolkit():
+@@ -52,5 +52,6 @@
+ #include <cppuhelper/bootstrap.hxx>
+ #include <comphelper/compbase.hxx>
++#include <comphelper/lok.hxx>
+ #include <cppuhelper/supportsservice.hxx>
+ #include <o3tl/safeint.hxx>
+ #include <osl/conditn.hxx>
+@@ -928,9 +929,10 @@ VCLXToolkit::VCLXToolkit():
  #ifndef IOS
      osl::Guard< osl::Mutex > aGuard( getInitMutex() );
      nVCLToolkitInstanceCount++;

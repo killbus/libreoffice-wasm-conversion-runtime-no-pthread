@@ -282,6 +282,7 @@ describe('native conversion source and build gates', () => {
       '+        throw std::runtime_error(std::string("osl::Thread::create failed: ") + name_);'
     );
     expect(noPthreadPatch).toContain('+    if (pLib->maThread)');
+    expect(noPthreadPatch).toContain('+#include <comphelper/lok.hxx>');
     expect(noPthreadPatch).toMatch(
       /if\( nVCLToolkitInstanceCount == 1 && !Application::IsInMain\(\) &&\s*\n\+        !comphelper::LibreOfficeKit::isActive\(\) \)/
     );
