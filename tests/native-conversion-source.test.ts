@@ -229,7 +229,7 @@ describe('native conversion source and build gates', () => {
     expect(configureIndex).toBeGreaterThan(noPthreadIndex);
   });
 
-  it('removes native pthread flags and serializes Emscripten thread-pool work', () => {
+  it('removes native pthread flags and serializes Emscripten-only work', () => {
     const touchedFiles = [...noPthreadPatch.matchAll(
       /^diff --git a\/(\S+) b\/(\S+)$/gm
     )].map((match) => {
@@ -240,6 +240,8 @@ describe('native conversion source and build gates', () => {
     expect(touchedFiles).toEqual([
       'solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk',
       'comphelper/source/misc/threadpool.cxx',
+      'configmgr/source/components.cxx',
+      'salhelper/source/thread.cxx',
       'desktop/source/lib/init.cxx',
     ]);
     const removedLines = noPthreadPatch
@@ -272,6 +274,12 @@ describe('native conversion source and build gates', () => {
     expect(noPthreadPatch).toContain('+    std::shared_ptr<ThreadTaskTag> pTag(pTask->mpTag);');
     expect(noPthreadPatch).toContain('+    pTask->exec();');
     expect(noPthreadPatch).toContain('+    pTag->onTaskWorkerDone();');
+    expect(noPthreadPatch).toContain(
+      '+            writeModFile(*this, modificationFileUrl_, data_);'
+    );
+    expect(noPthreadPatch).toContain(
+      '+        throw std::runtime_error(std::string("osl::Thread::create failed: ") + name_);'
+    );
     expect(noPthreadPatch).toContain('+    if (pLib->maThread)');
   });
 

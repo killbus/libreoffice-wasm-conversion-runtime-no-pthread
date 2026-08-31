@@ -84,6 +84,44 @@ diff --git a/comphelper/source/misc/threadpool.cxx b/comphelper/source/misc/thre
  }
  
  std::unique_ptr<ThreadTask> ThreadPool::popWorkLocked( std::unique_lock< std::mutex > & rGuard, bool bWait )
+diff --git a/configmgr/source/components.cxx b/configmgr/source/components.cxx
+--- a/configmgr/source/components.cxx
++++ b/configmgr/source/components.cxx
+@@ -280,11 +280,22 @@ void Components::writeModifications() {
+     case ModificationTarget::None:
+         break;
+     case ModificationTarget::File:
++#ifdef __EMSCRIPTEN__
++        // There is no background pthread in the single-threaded WASM build.
++        // Callers already serialize access through the shared configuration lock.
++        try {
++            writeModFile(*this, modificationFileUrl_, data_);
++        } catch (css::uno::RuntimeException &) {
++            // Match WriteThread::execute(): persistence failures are non-fatal.
++            TOOLS_WARN_EXCEPTION("configmgr", "error writing modifications");
++        }
++#else
+         if (!writeThread_.is()) {
+             writeThread_ = new WriteThread(
+                 &writeThread_, *this, modificationFileUrl_, data_);
+             writeThread_->launch();
+         }
++#endif
+         break;
+     case ModificationTarget::Dconf:
+ #if ENABLE_DCONF
+diff --git a/salhelper/source/thread.cxx b/salhelper/source/thread.cxx
+--- a/salhelper/source/thread.cxx
++++ b/salhelper/source/thread.cxx
+@@ -25,7 +25,7 @@ void salhelper::Thread::launch() {
+     acquire();
+     comphelper::ScopeGuard g([this] { release(); });
+     if (!create()) {
+-        throw std::runtime_error("osl::Thread::create failed");
++        throw std::runtime_error(std::string("osl::Thread::create failed: ") + name_);
+     }
+     g.dismiss();
+ }
 diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
 --- a/desktop/source/lib/init.cxx
 +++ b/desktop/source/lib/init.cxx
