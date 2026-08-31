@@ -29,9 +29,9 @@
 
 ## Phase 5 — Native Build and Qualification
 
-- [ ] Push one reviewed build-trigger commit.
+- [x] Push one reviewed build-trigger commit.
 - [ ] Monitor and retry transient network/API/authorization failures.
-- [ ] Diagnose compiler/linker failures from complete logs before another build.
+- [x] Diagnose compiler/linker failures from complete logs before another build.
 - [ ] Download artifacts and verify no pthread/SAB/shared-memory surface remains.
 - [ ] Run Node and non-isolated-browser conversion gates.
 - [ ] Freeze the new candidate identity and complete documentation.

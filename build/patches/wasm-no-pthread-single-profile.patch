@@ -1,9 +1,12 @@
 diff --git a/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk b/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
 --- a/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
 +++ b/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk
-@@ -11,15 +11,12 @@
+@@ -11,15 +11,15 @@
  
  gb_RUN_CONFIGURE := $(SRCDIR)/solenv/bin/run-configure
++# Remove unxgcc.mk's host pthread flag from both compile and link commands.
++gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))
++gb_CXX_LINKFLAGS :=
  # avoid -s SAFE_HEAP=1 - c.f. gh#8584 this breaks source maps
 -gb_EMSCRIPTEN_CPPFLAGS := -pthread -s USE_PTHREADS=1 -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -s SUPPORT_LONGJMP=wasm
 +gb_EMSCRIPTEN_CPPFLAGS := -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -s SUPPORT_LONGJMP=wasm

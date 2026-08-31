@@ -292,6 +292,20 @@ apply_reviewed_patch \
     "wasm-no-pthread-single-profile.patch" \
     "$NO_PTHREAD_PATCH"
 
+EMSCRIPTEN_PLATFORM_FILE="${LO_DIR}/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk"
+if ! grep -Fqx 'gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))' \
+    "$EMSCRIPTEN_PLATFORM_FILE" || \
+   ! grep -Fqx 'gb_CXX_LINKFLAGS :=' "$EMSCRIPTEN_PLATFORM_FILE"; then
+    log_error "Emscripten platform still inherits the Unix C++ pthread flag"
+    exit 1
+fi
+if grep -Eq '^[[:space:]]*gb_EMSCRIPTEN_(CPPFLAGS|LDFLAGS).*([[:space:]]-pthread|USE_PTHREADS|PTHREAD_POOL_SIZE|PROXY_TO_PTHREAD|DEFAULT_PTHREAD_STACK_SIZE)' \
+    "$EMSCRIPTEN_PLATFORM_FILE"; then
+    log_error "Emscripten platform still contains active pthread settings"
+    exit 1
+fi
+log_success "Emscripten platform is configured without pthread flags"
+
 # Create autotext files (handled in Step 6 background process)
 # The mytexts autotext build tries to zip files that don't exist in WASM builds
 

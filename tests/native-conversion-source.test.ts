@@ -255,6 +255,19 @@ describe('native conversion source and build gates', () => {
     ]) {
       expect(removedLines).toContain(flag);
     }
+    expect(noPthreadPatch).toContain(
+      '+gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))'
+    );
+    expect(noPthreadPatch).toContain('+gb_CXX_LINKFLAGS :=');
+    expect(buildScript).toContain(
+      "grep -Fqx 'gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))'"
+    );
+    expect(buildScript).toContain(
+      "grep -Fqx 'gb_CXX_LINKFLAGS :='"
+    );
+    expect(buildScript).toContain(
+      'Emscripten platform still contains active pthread settings'
+    );
     expect(noPthreadPatch).toContain('+    pTask->mpTag->onTaskPushed();');
     expect(noPthreadPatch).toContain('+    std::shared_ptr<ThreadTaskTag> pTag(pTask->mpTag);');
     expect(noPthreadPatch).toContain('+    pTask->exec();');
