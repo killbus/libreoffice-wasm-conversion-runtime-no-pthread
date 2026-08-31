@@ -152,3 +152,18 @@ diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
  
      delete pLib;
      bInitialized = false;
+diff --git a/toolkit/source/awt/vclxtoolkit.cxx b/toolkit/source/awt/vclxtoolkit.cxx
+--- a/toolkit/source/awt/vclxtoolkit.cxx
++++ b/toolkit/source/awt/vclxtoolkit.cxx
+@@ -928,9 +928,10 @@ VCLXToolkit::VCLXToolkit():
+ #ifndef IOS
+     osl::Guard< osl::Mutex > aGuard( getInitMutex() );
+     nVCLToolkitInstanceCount++;
+-    if( ( nVCLToolkitInstanceCount == 1 ) && ( !Application::IsInMain() ) )
++    if( nVCLToolkitInstanceCount == 1 && !Application::IsInMain() &&
++        !comphelper::LibreOfficeKit::isActive() )
+     {
+         // setup execute thread
+         CreateMainLoopThread( ToolkitWorkerFunction, this );
+         getInitCondition().wait();
+     }

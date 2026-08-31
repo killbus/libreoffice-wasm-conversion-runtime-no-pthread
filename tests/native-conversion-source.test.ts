@@ -243,6 +243,7 @@ describe('native conversion source and build gates', () => {
       'configmgr/source/components.cxx',
       'salhelper/source/thread.cxx',
       'desktop/source/lib/init.cxx',
+      'toolkit/source/awt/vclxtoolkit.cxx',
     ]);
     const removedLines = noPthreadPatch
       .split(/\r?\n/)
@@ -281,6 +282,9 @@ describe('native conversion source and build gates', () => {
       '+        throw std::runtime_error(std::string("osl::Thread::create failed: ") + name_);'
     );
     expect(noPthreadPatch).toContain('+    if (pLib->maThread)');
+    expect(noPthreadPatch).toMatch(
+      /if\( nVCLToolkitInstanceCount == 1 && !Application::IsInMain\(\) &&\s*\n\+        !comphelper::LibreOfficeKit::isActive\(\) \)/
+    );
   });
 
   it('inspects generated native output before packaging it', () => {

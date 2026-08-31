@@ -32,6 +32,9 @@
 - [x] Push one reviewed build-trigger commit.
 - [ ] Monitor and retry transient network/API/authorization failures.
 - [x] Diagnose compiler/linker failures from complete logs before another build.
+- [x] Diagnose the third build's conversion deadlock from artifact disassembly and runtime profiling.
+- [x] Validate the upstream-derived LibreOfficeKit VCL toolkit guard locally.
+- [ ] Trigger and monitor a fourth clean native build from the reviewed patch.
 - [ ] Download artifacts and verify no pthread/SAB/shared-memory surface remains.
 - [ ] Run Node and non-isolated-browser conversion gates.
 - [ ] Freeze the new candidate identity and complete documentation.
