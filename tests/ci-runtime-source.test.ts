@@ -75,6 +75,16 @@ describe('release-only qualified runtime source', () => {
     }
   });
 
+  it('keeps npm publication explicitly disarmed until credentials are configured', () => {
+    const publishWorkflow = readText('.github/workflows/publish.yml');
+    expect(publishWorkflow).toContain(
+      "vars.NPM_PUBLISH_ENABLED == 'true'",
+    );
+    expect(publishWorkflow).toContain(
+      'NPM_TOKEN: ${{ secrets.NPM_TOKEN }}',
+    );
+  });
+
   it('retries every failed release download without exposing credentials', () => {
     const restoreSource = readText(
       'scripts/release-runtime/restore-qualified.mjs',

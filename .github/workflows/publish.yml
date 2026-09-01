@@ -8,7 +8,9 @@ on:
 
 jobs:
   release:
-    if: ${{ github.repository == 'killbus/libreoffice-wasm-conversion-runtime-no-pthread' && github.event.workflow_run.conclusion == 'success' }}
+    # Publishing is deliberately opt-in. Set NPM_PUBLISH_ENABLED=true only after
+    # configuring npm trusted publishing, or add NPM_TOKEN for the first publish.
+    if: ${{ github.repository == 'killbus/libreoffice-wasm-conversion-runtime-no-pthread' && github.event.workflow_run.conclusion == 'success' && vars.NPM_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,4 +56,5 @@ jobs:
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
