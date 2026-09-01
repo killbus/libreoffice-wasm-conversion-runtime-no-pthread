@@ -78,6 +78,7 @@
     "test:browser:ui": "playwright test --ui",
     "test:browser:headed": "playwright test --headed",
     "verify:native-package": "node scripts/verify-native-package-assets.mjs",
+    "runtime:restore": "node scripts/release-runtime/restore-qualified.mjs",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
@@ -103,12 +104,12 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/killbus/libreoffice-wasm-conversion-runtime.git"
+    "url": "git+https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git"
   },
   "bugs": {
-    "url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/issues"
+    "url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread/issues"
   },
-  "homepage": "https://github.com/killbus/libreoffice-wasm-conversion-runtime#readme",
+  "homepage": "https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread#readme",
   "sideEffects": false,
   "engines": {
     "node": ">=18.0.0"

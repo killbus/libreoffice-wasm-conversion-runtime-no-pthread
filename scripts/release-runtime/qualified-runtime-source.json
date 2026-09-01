@@ -1,14 +1,15 @@
 {
   "schemaVersion": 1,
   "kind": "libreoffice-wasm-runtime-qualified-source",
-  "candidateId": "70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68",
+  "candidateId": "c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9",
   "candidateQualified": true,
   "releaseQualified": true,
   "draft": false,
-  "releaseId": "372605136",
-  "releaseAssetId": "519905261",
-  "releaseAssetName": "libreoffice-wasm-runtime-70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68.zip",
-  "releaseAssetBytes": 248884128,
-  "releaseAssetSha256": "457c9e32cd2df330abcaf78f4698011087c2f167362e8541519bb84031fc9534",
+  "repository": "killbus/libreoffice-wasm-conversion-runtime-no-pthread",
+  "releaseId": "379978707",
+  "releaseAssetId": "538393011",
+  "releaseAssetName": "libreoffice-wasm-runtime-c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9.zip",
+  "releaseAssetBytes": 246978336,
+  "releaseAssetSha256": "6b8b31cf5bb8753e5937145c24006348ff81622a95faa7c580a82647c46fbf2c",
   "specPath": "scripts/release-runtime/qualified-candidate-spec.json"
 }

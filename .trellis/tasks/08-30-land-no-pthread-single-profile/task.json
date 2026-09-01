@@ -20,7 +20,21 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": [],
-  "notes": "",
-  "meta": {}
+  "relatedFiles": [
+    "build/patches/wasm-no-pthread-single-profile.patch",
+    "scripts/release-runtime/qualified-candidate-spec.json",
+    "scripts/release-runtime/qualified-runtime-source.json",
+    "scripts/release-runtime/restore-qualified.mjs"
+  ],
+  "notes": "Qualified and published the single-profile no-pthread runtime from clean build 33412490741. Landing remains in progress while heavyweight runtime bytes are removed from Git LFS and all consumers are moved to deterministic restoration from the qualified release.",
+  "meta": {
+    "nativeBuildRunId": "33412490741",
+    "nativeBuildJobId": "99555169796",
+    "candidateId": "c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9",
+    "releaseId": "379978707",
+    "releaseAssetId": "538393011",
+    "releaseAssetSha256": "6b8b31cf5bb8753e5937145c24006348ff81622a95faa7c580a82647c46fbf2c",
+    "releasePublishedAt": "2026-08-31T19:54:55Z",
+    "qualificationReport": ".trellis/tasks/08-30-land-no-pthread-single-profile/research/fifth-build-33412490741.md"
+  }
 }

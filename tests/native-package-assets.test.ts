@@ -18,11 +18,11 @@ const candidateSpec = JSON.parse(
 );
 
 describe('native package asset gate', () => {
-  it('binds the package bytes and glue to the qualified successor candidate', async () => {
+  it('binds the package bytes and glue to the qualified no-pthread candidate', async () => {
     const report = await verifyNativePackageAssets({ root, spec: candidateSpec });
 
     expect(report.candidateId).toBe(
-      '70c87563cbcf8c9f032120d8f8847602a9560ddcd2d13c84831cfab4cd170c68',
+      'c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9',
     );
     expect(report.assets.map((asset) => asset.path)).toEqual([
       'wasm/soffice.cjs',

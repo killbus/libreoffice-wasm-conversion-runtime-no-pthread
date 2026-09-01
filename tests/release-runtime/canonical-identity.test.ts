@@ -5,30 +5,30 @@ import {
 } from '../../scripts/release-runtime/lib/canonical.mjs'
 import { validateFrozenSpec } from '../../scripts/release-runtime/lib/schemata.mjs'
 
-// Frozen identity from research/artifact-provenance.md.
+// Frozen identity from the accepted no-pthread build.
 const FROZEN_CANDIDATE_ID =
-  '85b6fb0e3f50570d085547f997eaa7584e5e49d076cd584639f31f51cecc4ad6'
+  'c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9'
 
 const FROZEN_ASSETS = [
-  { path: 'dist/browser.d.ts', role: 'browserTypes', mimeType: 'text/plain', bytes: 71783, sha256: '73d0f6ab719d0f643d38fc1839be295f0aed4cb09a8c8cb8f054d65a224f63fb' },
-  { path: 'dist/browser.js', role: 'browserModule', mimeType: 'text/javascript', bytes: 87881, sha256: '9fa0fef0b7554bef5c5a59c4fc85a325d77b0a218129be38febf4a6d02a4518c' },
-  { path: 'dist/browser.worker.global.js', role: 'browserWorker', mimeType: 'text/javascript', bytes: 122735, sha256: '9cababb37ce81ca8d60158cd6ffe1b5e218cbcb33c5d87bc74f08ec8e3804741' },
-  { path: 'wasm/loader.cjs', role: 'nodeLoader', mimeType: 'text/javascript', bytes: 10513, sha256: '7cebd863dcd071a5eb02bc26fa7701e7dc5c865d1e130e5595672e56a34934cf' },
-  { path: 'wasm/soffice.cjs', role: 'nodeGlue', mimeType: 'text/javascript', bytes: 439517, sha256: '0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5' },
-  { path: 'wasm/soffice.data', role: 'filesystemData', mimeType: 'application/octet-stream', bytes: 99735790, sha256: 'c4b8a92b566d4e0d4723d321ef926e1b9fbeb575d28cdd6466d27fd2c17c5514' },
-  { path: 'wasm/soffice.js', role: 'browserGlue', mimeType: 'text/javascript', bytes: 439517, sha256: '0c18483bdf23a83e9ab1d180fc8d3c850f6cd57a42e4e1cda545e25c512940a5' },
-  { path: 'wasm/soffice.wasm', role: 'wasmBinary', mimeType: 'application/wasm', bytes: 148022311, sha256: 'b24a888550d27d2942ff9c8c9a84e20cd0c852db154e8558647cb9c5294ff291' },
+  { path: 'dist/browser.d.ts', role: 'browserTypes', mimeType: 'text/plain', bytes: 15889, sha256: '31651bfee684a4a0e1a6c94b25adea20410e0d5a8f1504aede947bba576ce6b9' },
+  { path: 'dist/browser.js', role: 'browserModule', mimeType: 'text/javascript', bytes: 90277, sha256: 'a2956d468193de941602c02d3d3b3f88f21e68d72b893e3a27c37f675c314d17' },
+  { path: 'dist/browser.worker.global.js', role: 'browserWorker', mimeType: 'text/javascript', bytes: 121754, sha256: '8bb3e6b2321f832be5219de786b2511c07f5c83c37c3a4f323a126ebaae749df' },
+  { path: 'wasm/loader.cjs', role: 'nodeLoader', mimeType: 'text/javascript', bytes: 10730, sha256: 'e1abffbccc38db8e19d4aa2176b65e16a6cad0311cb2aae6973efaa083532aad' },
+  { path: 'wasm/soffice.cjs', role: 'nodeGlue', mimeType: 'text/javascript', bytes: 414054, sha256: 'feb653e20983238a2baa256c3823b3f73823531a36016c778bcc7d4afc34c457' },
+  { path: 'wasm/soffice.data', role: 'filesystemData', mimeType: 'application/octet-stream', bytes: 99735790, sha256: '2f152a0691284deb9dfbee0a925fe4166587e063fa84eacdcb1413a272d035de' },
+  { path: 'wasm/soffice.js', role: 'browserGlue', mimeType: 'text/javascript', bytes: 414054, sha256: 'feb653e20983238a2baa256c3823b3f73823531a36016c778bcc7d4afc34c457' },
+  { path: 'wasm/soffice.wasm', role: 'wasmBinary', mimeType: 'application/wasm', bytes: 146171647, sha256: '0ca7ecf05c26e87c714e72a0cee705ac4254dfd81f504683a75e6abfb661a709' },
 ]
 
 const FROZEN_PROVENANCE = {
   native: {
-    commit: '71d33678ed74872ebbb1bc37f5778143f8f5e401',
-    githubActionsRunId: '31211473147',
+    commit: '2acc06e13040eee9e42e61005e73cdf952ae67fd',
+    githubActionsRunId: '33412490741',
     abi: 'lok-convert-document-v1',
     schemaVersion: 1,
   },
   wrapper: {
-    commit: 'df3f73c789e6d2abf71cbcd75186118d2bbc795a',
+    commit: '2acc06e13040eee9e42e61005e73cdf952ae67fd',
   },
 }
 
@@ -51,7 +51,7 @@ describe('frozen candidate-ID derivation', () => {
   it('treats any asset byte/hash change as a new candidate', () => {
     const changed = FROZEN_ASSETS.map((asset) =>
       asset.path === 'wasm/soffice.wasm'
-        ? { ...asset, bytes: 148022312, sha256: 'b24a888550d27d2942ff9c8c9a84e20cd0c852db154e8558647cb9c5294ff29f' }
+        ? { ...asset, bytes: 146171648, sha256: '0ca7ecf05c26e87c714e72a0cee705ac4254dfd81f504683a75e6abfb661a708' }
         : asset
     )
     expect(identity(changed)).not.toBe(FROZEN_CANDIDATE_ID)
@@ -90,12 +90,17 @@ describe('frozen candidate-ID derivation', () => {
 })
 
 describe('frozen spec schema', () => {
-  it('rejects the checked-in legacy threaded candidate spec', async () => {
+  it('accepts both checked-in no-pthread candidate specs', async () => {
     const { readFile } = await import('node:fs/promises')
     const { resolve } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
-    const specPath = resolve(fileURLToPath(import.meta.url), '../../../scripts/release-runtime/candidate-spec.json')
-    const legacySpec = JSON.parse(await readFile(specPath, 'utf8'))
-    expect(() => validateFrozenSpec(legacySpec)).toThrow(/runtime threading|legacy pthread/)
+    for (const filename of ['candidate-spec.json', 'qualified-candidate-spec.json']) {
+      const specPath = resolve(fileURLToPath(import.meta.url), `../../../scripts/release-runtime/${filename}`)
+      const spec = JSON.parse(await readFile(specPath, 'utf8'))
+      expect(validateFrozenSpec(spec)).toMatchObject({
+        candidateId: FROZEN_CANDIDATE_ID,
+        runtime: FROZEN_RUNTIME,
+      })
+    }
   })
 })

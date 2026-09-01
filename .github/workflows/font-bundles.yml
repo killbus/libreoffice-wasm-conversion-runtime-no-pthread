@@ -31,7 +31,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Enforce strict semantic-version release tag (fail closed)
         if: github.event_name == 'release'
@@ -45,6 +45,11 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Restore qualified runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run runtime:restore
 
       - name: Install dependencies
         run: npm ci

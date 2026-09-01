@@ -4,7 +4,7 @@
  * First gate for the "conversion-only native bridge" task:
  *   test.docx → pdf must succeed end-to-end through the public API.
  *
- * This test uses the EXISTING shipped wasm/soffice.wasm (Git LFS) to
+ * This test uses the restored qualified wasm/soffice.wasm to
  * establish a baseline BEFORE any conversion-only trimming is applied.
  * The trimmed wasm (produced by the GHA build workflow) must also pass
  * this same gate.

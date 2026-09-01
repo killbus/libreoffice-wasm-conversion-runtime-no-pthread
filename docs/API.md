@@ -920,8 +920,8 @@ sudo apt-get install -y \
 ### Build Steps
 
 ```bash
-git clone https://github.com/matbeedotcom/libreoffice-document-converter.git
-cd libreoffice-document-converter
+git clone https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git
+cd libreoffice-wasm-conversion-runtime-no-pthread
 
 # Run the build script (takes 1-4 hours)
 BUILD_JOBS=32 ./build/build-wasm.sh

@@ -45,10 +45,10 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') && contains(github.event.release.tag_name, '.') && !contains(github.event.release.tag_name, 'runtime')) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (with LFS binaries)
+      - name: Checkout (without Git LFS)
         uses: actions/checkout@v7
         with:
-          lfs: true
+          lfs: false
 
       - name: Enforce strict semantic-version release tag (fail closed)
         if: github.event_name == 'release'
@@ -63,23 +63,16 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Restore qualified runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run runtime:restore
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build browser bundle (dist/)
         run: npm run build
-
-      - name: Verify WASM binaries were pulled from LFS
-        run: |
-          set -euo pipefail
-          for f in wasm/soffice.wasm wasm/soffice.data; do
-            size=$(wc -c < "$f")
-            echo "$f: $size bytes"
-            if [ "$size" -lt 1000000 ]; then
-              echo "::error::$f is only $size bytes — it looks like a Git LFS pointer. LFS content was not pulled."
-              exit 1
-            fi
-          done
 
       - name: Assemble Pages site
         run: |
