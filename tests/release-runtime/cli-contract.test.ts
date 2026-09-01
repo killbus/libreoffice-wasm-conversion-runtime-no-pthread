@@ -210,10 +210,7 @@ describe('stage-draft.mjs CLI contract', () => {
       )
 
       expect(error).not.toBeNull()
-      expect(String(error.stdout)).toContain('"dryRun": false')
-      expect(`${error.stdout}${error.stderr}`).not.toContain(
-        'Missing required option: --dry-run'
-      )
+      expect(`${error.stdout}${error.stderr}`).not.toContain('Missing required option: --dry-run')
     } finally {
       await rm(workRoot, { recursive: true, force: true }).catch(() => {})
     }

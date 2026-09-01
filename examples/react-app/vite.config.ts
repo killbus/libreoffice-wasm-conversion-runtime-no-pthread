@@ -30,8 +30,6 @@ function serveParentPackage(): Plugin {
             const ext = extname(filePath);
 
             res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-            res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-            res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
             res.end(content);
             return;
           }
@@ -45,19 +43,6 @@ function serveParentPackage(): Plugin {
 
 export default defineConfig({
   plugins: [react(), serveParentPackage()],
-  server: {
-    headers: {
-      // Required for SharedArrayBuffer (WASM threading)
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-  },
-  preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
-  },
   resolve: {
     alias: {
       // Resolve linked package subpath exports

@@ -2,8 +2,7 @@
  * Immutable package-relative browser asset deployment contract.
  *
  * Consumers choose public URLs and copy these files from the installed package.
- * The current qualified runtime uses Emscripten's main-script pthread mode, so
- * no external `soffice.worker.js` asset is part of this contract.
+ * The runtime is compiled without pthread support and has no internal worker asset.
  */
 
 export type LibreOfficeBrowserAssetKey =
@@ -50,7 +49,7 @@ const sofficeData = Object.freeze({
 export const LIBREOFFICE_BROWSER_ASSET_CONTRACT = Object.freeze({
   schemaVersion: 1,
   packageName: '@killbus/libreoffice-converter',
-  pthreadWorkerMode: 'main-script',
+  threading: 'none',
   assets: Object.freeze({
     browserWorkerJs,
     sofficeJs,

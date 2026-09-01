@@ -67,7 +67,7 @@
   ],
   "scripts": {
     "build": "node scripts/build-package.mjs",
-    "build:wasm": "bash build/build-native.sh",
+    "build:wasm": "bash build/build-wasm.sh",
     "dev": "tsx watch src/server.ts",
     "dev:browser": "node dev-server.mjs",
     "start": "node dist/server.js",
@@ -78,11 +78,13 @@
     "test:browser:ui": "playwright test --ui",
     "test:browser:headed": "playwright test --headed",
     "verify:native-package": "node scripts/verify-native-package-assets.mjs",
+    "runtime:restore": "node scripts/release-runtime/restore-qualified.mjs",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepack": "node scripts/build-package.mjs --silent"
+    "prepack": "node scripts/build-package.mjs --silent",
+    "verify:no-pthread": "node scripts/inspect-no-pthread-runtime.mjs wasm"
   },
   "keywords": [
     "libreoffice",
@@ -102,12 +104,12 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/killbus/libreoffice-wasm-conversion-runtime.git"
+    "url": "git+https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git"
   },
   "bugs": {
-    "url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime/issues"
+    "url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread/issues"
   },
-  "homepage": "https://github.com/killbus/libreoffice-wasm-conversion-runtime#readme",
+  "homepage": "https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread#readme",
   "sideEffects": false,
   "engines": {
     "node": ">=18.0.0"

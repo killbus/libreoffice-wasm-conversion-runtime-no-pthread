@@ -1,4 +1,2 @@
-wasm/*.wasm filter=lfs diff=lfs merge=lfs -text
-wasm/*.data filter=lfs diff=lfs merge=lfs -text
 .trellis/tasks/08-10-publish-qualified-libreoffice-runtime-artifact/** text eol=lf
 pnpm-workspace.yaml text eol=lf

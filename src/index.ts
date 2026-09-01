@@ -158,7 +158,7 @@ export async function convertDocument(
   // Reject deterministic contract failures before initializing WASM or a subprocess.
   validateConversionOptions(options);
 
-  // In Node.js, use subprocess for clean exit (no hanging pthread workers)
+  // In Node.js, use a subprocess to isolate native runtime state
   // SubprocessConverter only supports basic conversions, not image/page options
   const isBasicConversion = !options.image;
 

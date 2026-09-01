@@ -7,9 +7,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# WASM build outputs (tracked via Git LFS)
-# wasm/*.wasm - tracked by LFS
-# wasm/*.data - tracked by LFS
+# Qualified runtime payloads are restored from the pinned GitHub Release.
+wasm/*.wasm
+wasm/*.data
 wasm/*.js.metadata
 !wasm/.gitkeep
 

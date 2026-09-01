@@ -357,7 +357,6 @@ const paths = createWasmPaths();
 //   sofficeJs: '/wasm/soffice.js',
 //   sofficeWasm: '/wasm/soffice.wasm',
 //   sofficeData: '/wasm/soffice.data',
-//   pthreadWorkerMode: 'main-script',
 // }
 
 // Or use your own CDN
@@ -368,24 +367,12 @@ const converter = createWorkerBrowserConverter({
   sofficeJs: 'https://cdn.example.com/wasm/soffice.js',
   sofficeWasm: 'https://cdn.example.com/wasm/soffice.wasm',
   sofficeData: 'https://cdn.example.com/wasm/soffice.data',
-  pthreadWorkerMode: 'main-script',
   browserWorkerJs: '/workers/browser.worker.js',
 });
 ```
 
-The current browser artifact starts pthreads from `soffice.js` through
-`mainScriptUrlOrBlob`. Do not deploy or configure a standalone
-`soffice.worker.js`. External-worker mode is valid only for a separately built
-and frozen artifact and must be selected explicitly with its worker URL.
-
-### Required HTTP Headers
-
-SharedArrayBuffer requires specific CORS headers on your server:
-
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
+The browser runtime is compiled without pthread support. It does not load a nested
+`soffice.worker.js`, and it does not require cross-origin isolation.
 
 ### WASM Loading Progress
 
@@ -821,14 +808,6 @@ Ensure the `wasm/` directory contains all required files:
 - `soffice.data`
 - `loader.cjs`
 
-### "SharedArrayBuffer is not defined" (Browser)
-
-SharedArrayBuffer requires specific headers. Add to your server:
-
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
 
 ### Browser initialization seems slow
 
@@ -860,18 +839,12 @@ gzip -9 -k wasm/soffice.data
 
 ### Process Doesn't Exit (Node.js)
 
-The WASM module uses pthread workers that keep the Node.js process alive:
+The no-pthread runtime does not create native worker threads. If an application
+still stays alive, destroy the converter and inspect other open handles owned by
+the application:
 
 ```javascript
-// Option 1: Explicitly exit when done
 await converter.destroy();
-process.exit(0);
-
-// Option 2: For servers, the process stays alive anyway (this is fine)
-
-// Option 3: Use setTimeout with unref() for scripts
-const timer = setTimeout(() => {}, 0);
-timer.unref();
 ```
 
 ### Debug Mode
@@ -947,8 +920,8 @@ sudo apt-get install -y \
 ### Build Steps
 
 ```bash
-git clone https://github.com/matbeedotcom/libreoffice-document-converter.git
-cd libreoffice-document-converter
+git clone https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git
+cd libreoffice-wasm-conversion-runtime-no-pthread
 
 # Run the build script (takes 1-4 hours)
 BUILD_JOBS=32 ./build/build-wasm.sh

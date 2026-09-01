@@ -26,6 +26,27 @@ function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
 }
 
+function encodeVarUint(value) {
+  const bytes = []
+  do {
+    let byte = value & 0x7f
+    value >>>= 7
+    if (value !== 0) byte |= 0x80
+    bytes.push(byte)
+  } while (value !== 0)
+  return Buffer.from(bytes)
+}
+
+function validWasmBytes(payloadBytes = 4096) {
+  const payload = Buffer.alloc(payloadBytes)
+  const customSection = Buffer.concat([Buffer.from([0]), payload])
+  return Buffer.concat([
+    Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0]),
+    encodeVarUint(customSection.length),
+    customSection,
+  ])
+}
+
 // Original valid derivation contract.
 function makeSyntheticAssets() {
   const content = (label) => Buffer.from(`synthetic:${label}`)
@@ -37,7 +58,7 @@ function makeSyntheticAssets() {
     { path: 'wasm/soffice.cjs', role: 'nodeGlue', mimeType: 'text/javascript', sourceRoot: 'native', sourcePath: 'soffice.cjs', bytes: content('soffice.cjs') },
     { path: 'wasm/soffice.data', role: 'filesystemData', mimeType: 'application/octet-stream', sourceRoot: 'native', sourcePath: 'soffice.data', bytes: Buffer.concat([content('soffice.prologue'), Buffer.alloc(1024, 0xab)]) },
     { path: 'wasm/soffice.js', role: 'browserGlue', mimeType: 'text/javascript', sourceRoot: 'native', sourcePath: 'soffice.js', bytes: content('soffice.js') },
-    { path: 'wasm/soffice.wasm', role: 'wasmBinary', mimeType: 'application/wasm', sourceRoot: 'native', sourcePath: 'soffice.wasm', bytes: Buffer.concat([content('soffice.wasm'), Buffer.alloc(4096, 0xcd)]) },
+    { path: 'wasm/soffice.wasm', role: 'wasmBinary', mimeType: 'application/wasm', sourceRoot: 'native', sourcePath: 'soffice.wasm', bytes: validWasmBytes() },
   ]
   return entries.map(({ path, role, mimeType, sourceRoot, sourcePath, bytes }) => ({
     path,
@@ -79,9 +100,7 @@ export async function makeSyntheticCandidate(options = {}) {
     sourceRoot,
     sourcePath,
   }))
-  const runtime = options.pthreadWorkerMode
-    ? { pthreadWorkerMode: options.pthreadWorkerMode, externalWorker: null }
-    : { pthreadWorkerMode: 'main-script', externalWorker: null }
+  const runtime = options.runtime ?? { threading: 'none' }
   const provenance = options.provenance ?? FROZEN_PROVENANCE
   const candidateId = deriveCandidateIdentity({ provenance, runtime, assets })
 

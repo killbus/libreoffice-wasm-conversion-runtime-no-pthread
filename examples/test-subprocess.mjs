@@ -1,5 +1,5 @@
 /**
- * Test the subprocess worker architecture without PROXY_TO_PTHREAD
+ * Test the subprocess worker architecture with the no-pthread runtime
  */
 
 import { createSubprocessConverter } from './dist/index.js';
@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 async function main() {
-  console.log('Testing subprocess worker architecture (no PROXY_TO_PTHREAD)');
+  console.log('Testing subprocess worker architecture (no-pthread runtime)');
   console.log('='.repeat(60));
 
   const converter = await createSubprocessConverter({

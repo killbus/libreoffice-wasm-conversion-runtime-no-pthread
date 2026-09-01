@@ -60,7 +60,7 @@ export async function createConverter(
 
 /**
  * Quick conversion utility - creates converter, converts, then destroys
- * Uses SubprocessConverter for clean process exit (no hanging pthread workers)
+ * Uses SubprocessConverter to isolate native runtime state
  */
 export async function convertDocument(
   input: Uint8Array | ArrayBuffer | Buffer,

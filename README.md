@@ -79,7 +79,6 @@ import { createWorkerBrowserConverter, createWasmPaths } from '@killbus/libreoff
 const converter = createWorkerBrowserConverter({
   ...createWasmPaths('/wasm/'),
   browserWorkerJs: '/assets/libreoffice/browser.worker.global.js',
-  pthreadWorkerMode: 'main-script',
   onProgress: (info) => console.log(`${info.percent}%: ${info.message}`),
 });
 
@@ -118,14 +117,9 @@ for (const asset of Object.values(LIBREOFFICE_BROWSER_ASSET_CONTRACT.assets)) {
 }
 ```
 
-The current contract is `pthreadWorkerMode: 'main-script'`; do not deploy or configure
-an external `soffice.worker.js`. Serve the four declared assets with their declared MIME
-types, and pass the resulting URLs to `createWorkerBrowserConverter`.
-**Required HTTP headers** for SharedArrayBuffer:
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
+The runtime is compiled without pthread support. Deploy the four declared assets with
+their declared MIME types and pass the resulting URLs to
+`createWorkerBrowserConverter`. Cross-origin isolation headers are not required.
 
 ## Font Support
 
@@ -157,7 +151,7 @@ const converter = await createConverter({ fonts });
 
 ### Using Prebuilt Font Bundles
 
-Download regional font bundles from [GitHub Releases](https://github.com/killbus/libreoffice-wasm-conversion-runtime/releases):
+Download regional font bundles from [GitHub Releases](https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread/releases):
 
 | Bundle | Scripts | Size |
 |--------|---------|------|
@@ -203,7 +197,8 @@ await converter.initialize();
 ## System Requirements
 
 - Node.js 18.0.0+
-- ~150MB disk space for WASM files
+- `unzip` for restoring the qualified development runtime
+- ~250MB disk space for the materialized runtime, plus ~250MB for its reusable download cache
 - Browser: ~240MB initial download (cached after first load)
 
 ## License
@@ -212,14 +207,17 @@ MPL-2.0 (same as LibreOffice)
 
 ## Contributing
 
-Ensure you have [git LFS](https://git-lfs.com/) and [pnpm](https://pnpm.io/) installed.
+The heavyweight `soffice.wasm` and `soffice.data` files are intentionally not stored in Git or Git LFS. Restore the exact qualified release before building or packaging:
 
 ```bash
-git clone https://github.com/killbus/libreoffice-wasm-conversion-runtime.git
-cd libreoffice-wasm-conversion-runtime
-pnpm install
-pnpm build
-pnpm test
+git clone https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git
+cd libreoffice-wasm-conversion-runtime-no-pthread
+npm ci
+npm run runtime:restore
+npm run build
+npm test
 ```
 
-See [docs/API.md#building-from-source](docs/API.md#building-from-source) for building the WASM module.
+The restore command pins the release repository, asset ID, byte length, archive SHA-256, candidate identity, and every packaged runtime asset hash. Downloads are cached outside the repository and transient HTTP or network failures are retried. Set `LIBREOFFICE_RUNTIME_CACHE_DIR` to choose another cache location.
+
+See [docs/API.md#building-from-source](docs/API.md#building-from-source) only when rebuilding the native WASM runtime itself.

@@ -9,10 +9,11 @@
 #   CLEAN_BUILD=1 ./build-wasm.sh           # Clean and rebuild
 #   LIBREOFFICE_VERSION=libreoffice-24-8 ./build-wasm.sh  # Specify version
 
-set -e
+set -euo pipefail
 
 # Configuration
 LIBREOFFICE_VERSION="${LIBREOFFICE_VERSION:-libreoffice-24-8}"
+LIBREOFFICE_COMMIT="${LIBREOFFICE_COMMIT:-d1c9e0e4e1ddeb24fe8f93e56860b3765043f8b1}"
 EMSDK_VERSION="${EMSDK_VERSION:-3.1.74}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 SKIP_DEPS="${SKIP_DEPS:-0}"
@@ -20,6 +21,7 @@ CLEAN_BUILD="${CLEAN_BUILD:-0}"
 RESET_PATCHED_SOURCE="${RESET_PATCHED_SOURCE:-0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/patch-stack.sh"
+RETRY_COMMAND="${SCRIPT_DIR}/../scripts/retry-command.sh"
 
 # Detect Docker environment and use pre-installed paths
 if [ -d "/opt/emsdk" ] && [ -d "/build/libreoffice" ]; then
@@ -53,7 +55,7 @@ echo "  LibreOffice WASM Build"
 echo "=============================================="
 echo ""
 echo "Configuration:"
-echo "  LibreOffice:  ${LIBREOFFICE_VERSION}"
+echo "  LibreOffice:  ${LIBREOFFICE_VERSION} @ ${LIBREOFFICE_COMMIT}"
 echo "  Emscripten:   ${EMSDK_VERSION}"
 echo "  Build Dir:    ${BUILD_DIR}"
 echo "  Output Dir:   ${OUTPUT_DIR}"
@@ -93,8 +95,8 @@ elif check_deps; then
 else
     log_info "Installing dependencies..."
     if command -v apt-get &> /dev/null; then
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
+        "${RETRY_COMMAND}" sudo apt-get update
+        "${RETRY_COMMAND}" sudo apt-get install -y --no-install-recommends \
             build-essential git cmake ninja-build \
             python3 python3-pip python3-dev python3-setuptools \
             autoconf automake bison ccache flex gawk gettext \
@@ -125,14 +127,14 @@ else
     # Local build - download if needed
     if [ ! -d "${EMSDK_DIR}" ]; then
         log_info "Cloning Emscripten SDK..."
-        git clone https://github.com/emscripten-core/emsdk.git "${EMSDK_DIR}"
+        "${RETRY_COMMAND}" git clone https://github.com/emscripten-core/emsdk.git "${EMSDK_DIR}"
     fi
 
     cd "${EMSDK_DIR}"
 
     if [ ! -f "${EMSDK_DIR}/upstream/emscripten/emcc" ]; then
         log_info "Installing Emscripten ${EMSDK_VERSION}..."
-        ./emsdk install ${EMSDK_VERSION}
+        "${RETRY_COMMAND}" ./emsdk install "${EMSDK_VERSION}"
         ./emsdk activate ${EMSDK_VERSION}
     else
         ./emsdk activate ${EMSDK_VERSION}
@@ -159,10 +161,9 @@ else
     # Local build - clone if needed
     LO_DIR="${BUILD_DIR}/libreoffice"
 
-    if [ ! -d "${LO_DIR}" ]; then
-        log_info "Cloning LibreOffice ${LIBREOFFICE_VERSION} (this takes a while)..."
-        git clone --depth 1 --branch ${LIBREOFFICE_VERSION} \
-            https://git.libreoffice.org/core "${LO_DIR}"
+    if [ ! -d "${LO_DIR}/.git" ]; then
+        log_info "Cloning LibreOffice source repository..."
+        "${RETRY_COMMAND}" git clone --filter=blob:none --no-checkout https://git.libreoffice.org/core "${LO_DIR}"
     else
         log_success "LibreOffice source exists at ${LO_DIR}"
     fi
@@ -170,18 +171,24 @@ fi
 
 cd "${LO_DIR}"
 
+if ! git cat-file -e "${LIBREOFFICE_COMMIT}^{commit}" 2>/dev/null; then
+    log_info "Fetching pinned LibreOffice commit ${LIBREOFFICE_COMMIT}..."
+    "${RETRY_COMMAND}" git fetch --depth 1 origin "${LIBREOFFICE_COMMIT}"
+fi
+git checkout --detach "${LIBREOFFICE_COMMIT}"
+
 CONSOLIDATED_PATCH="${SCRIPT_DIR}/patches/wasm-build-fixes.patch"
 CONVERSION_EXPORTS_PATCH="${SCRIPT_DIR}/patches/wasm-trim-lok-exports-conversion-only.patch"
 CONVERSION_SHIMS_PATCH="${SCRIPT_DIR}/patches/wasm-trim-lok-shims-conversion-only.patch"
 NATIVE_BRIDGE_PATCH="${SCRIPT_DIR}/patches/wasm-native-conversion-bridge.patch"
-ACTIVE_PATCHES=("$CONSOLIDATED_PATCH")
-if [ "${CONVERSION_ONLY:-0}" = "1" ]; then
-    ACTIVE_PATCHES+=(
-        "$CONVERSION_EXPORTS_PATCH"
-        "$CONVERSION_SHIMS_PATCH"
-        "$NATIVE_BRIDGE_PATCH"
-    )
-fi
+NO_PTHREAD_PATCH="${SCRIPT_DIR}/patches/wasm-no-pthread-single-profile.patch"
+ACTIVE_PATCHES=(
+    "$CONSOLIDATED_PATCH"
+    "$CONVERSION_EXPORTS_PATCH"
+    "$CONVERSION_SHIMS_PATCH"
+    "$NATIVE_BRIDGE_PATCH"
+    "$NO_PTHREAD_PATCH"
+)
 
 # Clean if requested. A clean build also implies source normalization below.
 if [ "$CLEAN_BUILD" = "1" ]; then
@@ -212,7 +219,7 @@ log_info "[4/7] Applying patches for headless WASM build..."
 # - Repository.mk: conditional wpftdraw/wpftimpress based on ENABLE_CDR/ENABLE_ETONYEK
 # - autogen.input: WASM build configuration
 # - desktop/source/lib/init.cxx: LOK shim functions for WASM
-# - solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk: PROXY_TO_PTHREAD, exports
+# - solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk: Emscripten runtime and exports
 # - writerperfect module fixes
 # - xmlsecurity headless fixes
 # - Emscripten fs image optimizations
@@ -257,9 +264,8 @@ apply_reviewed_patch() {
 
 apply_reviewed_patch "wasm-build-fixes.patch" "$CONSOLIDATED_PATCH"
 
-# Conversion-only atoms -- applied ON TOP of the consolidated baseline patch
-# when CONVERSION_ONLY=1. Independent atoms (archive 014/015 style), NOT
-# one giant reverse-diff:
+# Conversion-only atoms are the only profile in this fork. They are applied on
+# top of the consolidated baseline patch as independently reviewable layers:
 #   1. exports -- EXPORTED_FUNCTIONS link contract only (Executable_soffice_bin.mk)
 #   2. shims   -- non-conversion LOK shim bodies only (desktop/source/lib/init.cxx)
 #   3. bridge  -- private native conversion transaction (source + export list)
@@ -272,18 +278,33 @@ apply_conversion_atom() {
     apply_reviewed_patch "$@"
 }
 
-if [ "${CONVERSION_ONLY:-0}" = "1" ]; then
-    log_info "CONVERSION_ONLY=1 -- applying conversion-only atoms (exports, shims, then bridge)..."
-    apply_conversion_atom \
-        "wasm-trim-lok-exports-conversion-only.patch" \
-        "$CONVERSION_EXPORTS_PATCH"
-    apply_conversion_atom \
-        "wasm-trim-lok-shims-conversion-only.patch" \
-        "$CONVERSION_SHIMS_PATCH"
-    apply_conversion_atom \
-        "wasm-native-conversion-bridge.patch" \
-        "$NATIVE_BRIDGE_PATCH"
+log_info "Applying conversion-only atoms and the no-pthread profile..."
+apply_conversion_atom \
+    "wasm-trim-lok-exports-conversion-only.patch" \
+    "$CONVERSION_EXPORTS_PATCH"
+apply_conversion_atom \
+    "wasm-trim-lok-shims-conversion-only.patch" \
+    "$CONVERSION_SHIMS_PATCH"
+apply_conversion_atom \
+    "wasm-native-conversion-bridge.patch" \
+    "$NATIVE_BRIDGE_PATCH"
+apply_reviewed_patch \
+    "wasm-no-pthread-single-profile.patch" \
+    "$NO_PTHREAD_PATCH"
+
+EMSCRIPTEN_PLATFORM_FILE="${LO_DIR}/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk"
+if ! grep -Fqx 'gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))' \
+    "$EMSCRIPTEN_PLATFORM_FILE" || \
+   ! grep -Fqx 'gb_CXX_LINKFLAGS :=' "$EMSCRIPTEN_PLATFORM_FILE"; then
+    log_error "Emscripten platform still inherits the Unix C++ pthread flag"
+    exit 1
 fi
+if grep -Eq '^[[:space:]]*gb_EMSCRIPTEN_(CPPFLAGS|LDFLAGS).*([[:space:]]-pthread|USE_PTHREADS|PTHREAD_POOL_SIZE|PROXY_TO_PTHREAD|DEFAULT_PTHREAD_STACK_SIZE)' \
+    "$EMSCRIPTEN_PLATFORM_FILE"; then
+    log_error "Emscripten platform still contains active pthread settings"
+    exit 1
+fi
+log_success "Emscripten platform is configured without pthread flags"
 
 # Create autotext files (handled in Step 6 background process)
 # The mytexts autotext build tries to zip files that don't exist in WASM builds
@@ -392,7 +413,7 @@ echo "Finished: $(date)"
 #   soffice.cjs — Node (require after setting global.Module)
 #   soffice.js  — browser (<script> after setting window.Module)
 # EMSCRIPTEN gbuild links the executable as soffice.html (gb_Executable_EXT);
-# emscripten also emits aux soffice.js / .wasm / .worker.js beside it.
+# emscripten also emits aux soffice.js / .wasm beside it.
 # Packaging copies that aux soffice.js → soffice.cjs (not the .html shell).
 # Clear OUTPUT_DIR first so a failed copy cannot leave stale files.
 # ============================================================
@@ -414,13 +435,13 @@ if [ ! -d "$FONTS_DIR" ] || [ -z "$(ls -A $FONTS_DIR 2>/dev/null)" ]; then
     log_info "Adding minimal fallback fonts..."
     mkdir -p "$FONTS_DIR"
     if [ ! -f "$FONTS_DIR/NotoSans-Regular.ttf" ]; then
-        curl -sL "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf" \
-            -o "$FONTS_DIR/NotoSans-Regular.ttf" 2>/dev/null || \
+        "${RETRY_COMMAND}" curl -fSL "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf" \
+            -o "$FONTS_DIR/NotoSans-Regular.ttf" || \
         log_warn "Could not download NotoSans font"
     fi
     if [ ! -f "$FONTS_DIR/NotoSerif-Regular.ttf" ]; then
-        curl -sL "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Regular.ttf" \
-            -o "$FONTS_DIR/NotoSerif-Regular.ttf" 2>/dev/null || \
+        "${RETRY_COMMAND}" curl -fSL "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSerif/NotoSerif-Regular.ttf" \
+            -o "$FONTS_DIR/NotoSerif-Regular.ttf" || \
         log_warn "Could not download NotoSerif font"
     fi
     log_success "Added minimal fonts"
@@ -461,16 +482,10 @@ if [ ! -f "${ARTIFACT_DIR}/soffice.data" ]; then
     exit 1
 fi
 
-# This build entry point packages only the frozen main-script pthread profile.
-# Bootstrap mode comes from the glue bytes, never from the presence of an
-# optional sidecar file. External-worker glue requires a separate profile,
-# inventory, and candidate identity.
-if ! grep -qF 'mainScriptUrlOrBlob' "${ARTIFACT_DIR}/soffice.js"; then
-    log_error "soffice.js is not main-script pthread glue (mainScriptUrlOrBlob missing)."
-    exit 1
-fi
-if grep -qF 'soffice.worker.js' "${ARTIFACT_DIR}/soffice.js"; then
-    log_error "soffice.js requests a standalone worker; external-worker artifacts are not accepted by this profile."
+# Fail closed before packaging: this fork accepts only unshared, no-pthread
+# Emscripten output and never publishes an internal pthread worker sidecar.
+if ! node "${SCRIPT_DIR}/../scripts/inspect-no-pthread-runtime.mjs" "${ARTIFACT_DIR}"; then
+    log_error "Generated runtime violates the no-pthread artifact contract."
     exit 1
 fi
 
@@ -539,7 +554,7 @@ for req in soffice.wasm soffice.data soffice.cjs soffice.js; do
 done
 
 if find "${OUTPUT_DIR}" -type f \( -name 'soffice.worker.js' -o -name 'soffice.worker.cjs' \) -print -quit | grep -q .; then
-    log_error "Packaging contract violation: standalone pthread worker present in main-script output."
+    log_error "Packaging contract violation: standalone pthread worker present."
     exit 1
 fi
 

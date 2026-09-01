@@ -76,7 +76,7 @@ describe('published package contract', () => {
     expect(packageJson.name).toBe('@killbus/libreoffice-converter');
     expect(packageJson.version).toBe('2.7.2-pdfhow.1');
     expect(packageJson.repository.url).toBe(
-      'git+https://github.com/killbus/libreoffice-wasm-conversion-runtime.git',
+      'git+https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread.git',
     );
     expect(packageJson.publishConfig).toEqual({ access: 'public' });
   });
@@ -102,7 +102,7 @@ describe('published package contract', () => {
     expect(packageJson.scripts.postinstall).toBeUndefined();
   });
 
-  it('publishes only files compatible with the main-script pthread runtime', () => {
+  it('publishes only files required by the single no-pthread runtime', () => {
     expect(packageJson.files).toEqual([
       'dist',
       'wasm/loader.cjs',
@@ -166,7 +166,7 @@ describe('browser asset deployment contract', () => {
     expect(LIBREOFFICE_BROWSER_ASSET_CONTRACT).toEqual({
       schemaVersion: 1,
       packageName: '@killbus/libreoffice-converter',
-      pthreadWorkerMode: 'main-script',
+      threading: 'none',
       assets: {
         browserWorkerJs: {
           key: 'browserWorkerJs',

@@ -24,44 +24,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Restore qualified runtime from draft release
+      - name: Restore qualified runtime
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          runtime_source='scripts/release-runtime/qualified-runtime-source.json'
-          runtime_asset_id=$(node -e "const s=require('./${runtime_source}');process.stdout.write(s.releaseAssetId)")
-          runtime_asset_name=$(node -e "const s=require('./${runtime_source}');process.stdout.write(s.releaseAssetName)")
-          runtime_asset_bytes=$(node -e "const s=require('./${runtime_source}');process.stdout.write(String(s.releaseAssetBytes))")
-          runtime_asset_sha=$(node -e "const s=require('./${runtime_source}');process.stdout.write(s.releaseAssetSha256)")
-          runtime_candidate_id=$(node -e "const s=require('./${runtime_source}');process.stdout.write(s.candidateId)")
-          runtime_spec=$(node -e "const s=require('./${runtime_source}');process.stdout.write(s.specPath)")
-
-          runtime_root="$GITHUB_WORKSPACE/tmp/ci-runtime"
-          runtime_archive="$runtime_root/$runtime_asset_name"
-          runtime_extract="$runtime_root/extracted"
-          mkdir -p "$runtime_root"
-
-          curl --fail --show-error --silent --location \
-            --retry 3 --retry-all-errors \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/octet-stream' \
-            "https://api.github.com/repos/${{ github.repository }}/releases/assets/$runtime_asset_id" \
-            --output "$runtime_archive"
-
-          test "$(stat --printf='%s' "$runtime_archive")" = "$runtime_asset_bytes"
-          printf '%s  %s\n' "$runtime_asset_sha" "$runtime_archive" | sha256sum --check --strict -
-
-          node scripts/release-runtime/verify.mjs \
-            --archive "$runtime_archive" \
-            --extract-root "$runtime_extract" \
-            --report-out "$runtime_root/VERIFICATION-REPORT.json" \
-            --spec "$runtime_spec" \
-            --expected-candidate-id "$runtime_candidate_id"
-
-          for runtime_asset in loader.cjs soffice.cjs soffice.data soffice.js soffice.wasm; do
-            cp "$runtime_extract/wasm/$runtime_asset" "wasm/$runtime_asset"
-          done
+        run: npm run runtime:restore
 
       - name: Install dependencies
         run: npm ci

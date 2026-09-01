@@ -159,7 +159,7 @@ export async function freezeCandidate(options) {
   const wrapperRoot = resolve(options.wrapperRoot)
   const nativeArchive = resolve(options.nativeArchive)
   const expectedArchiveName =
-    `soffice-wasm-conversion-only-${options.runId}.zip`
+    `soffice-wasm-no-pthread-${options.runId}.zip`
   if (basename(nativeArchive) !== expectedArchiveName) {
     throw new FreezeCandidateError(
       `native archive must be named ${expectedArchiveName}`
@@ -188,10 +188,7 @@ export async function freezeCandidate(options) {
     },
     wrapper: { commit: options.wrapperCommit },
   }
-  const runtime = {
-    pthreadWorkerMode: 'main-script',
-    externalWorker: null,
-  }
+  const runtime = { threading: 'none' }
   const candidateId = deriveCandidateIdentity({ provenance, runtime, assets })
   return validateFrozenSpec({
     schemaVersion: 1,

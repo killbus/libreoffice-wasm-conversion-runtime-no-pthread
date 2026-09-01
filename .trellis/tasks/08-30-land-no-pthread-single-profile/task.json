@@ -1,0 +1,40 @@
+{
+  "id": "land-no-pthread-single-profile",
+  "name": "land-no-pthread-single-profile",
+  "title": "Land no-pthread single-profile runtime",
+  "description": "Convert this fork to one browser-first no-pthread runtime profile. Remove SharedArrayBuffer/cross-origin-isolation requirements, adapt the native build and wrapper/release contracts, validate locally first, and trigger expensive remote native builds only after static and unit gates pass.",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "no-pthread-single-profile",
+  "package": null,
+  "priority": "P1",
+  "creator": "killbus",
+  "assignee": "killbus",
+  "createdAt": "2026-08-30",
+  "completedAt": "2026-09-01",
+  "branch": "feat/no-pthread-single-profile",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "f8f9e96265964e15d518ec2d098b5ba8baaa0c3b",
+  "pr_url": "https://github.com/killbus/libreoffice-wasm-conversion-runtime-no-pthread/pull/1",
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "build/patches/wasm-no-pthread-single-profile.patch",
+    "scripts/release-runtime/qualified-candidate-spec.json",
+    "scripts/release-runtime/qualified-runtime-source.json",
+    "scripts/release-runtime/restore-qualified.mjs"
+  ],
+  "notes": "Qualified and published the single-profile no-pthread runtime from clean build 33412490741; removed pthread workers and cross-origin-isolation requirements; removed heavyweight runtime payloads from Git LFS; and moved CI, release, Pages, font, local build, and package flows to deterministic restoration from the pinned qualified public Release. Local runtime, browser, conversion, package, clean-tree, and focused contract gates passed, followed by PR CI.",
+  "meta": {
+    "nativeBuildRunId": "33412490741",
+    "nativeBuildJobId": "99555169796",
+    "candidateId": "c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9",
+    "releaseId": "379978707",
+    "releaseAssetId": "538393011",
+    "releaseAssetSha256": "6b8b31cf5bb8753e5937145c24006348ff81622a95faa7c580a82647c46fbf2c",
+    "releasePublishedAt": "2026-08-31T19:54:55Z",
+    "qualificationReport": ".trellis/tasks/08-30-land-no-pthread-single-profile/research/fifth-build-33412490741.md"
+  }
+}

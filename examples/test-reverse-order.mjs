@@ -23,7 +23,7 @@ async function testReverseOrder() {
   });
   
   try {
-    // Navigate to a minimal page that has COOP/COEP headers
+    // Navigate to the non-isolated demo page
     await page.goto('http://localhost:3000/', {
       waitUntil: 'networkidle',
       timeout: 60000,

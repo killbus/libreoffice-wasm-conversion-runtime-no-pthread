@@ -35,14 +35,14 @@ async function fixture() {
   await writeFile(join(wrapperRoot, 'wasm/loader.cjs'), 'module.exports={}\n')
   const nativeArchive = join(
     root,
-    `soffice-wasm-conversion-only-${RUN_ID}.zip`
+    `soffice-wasm-no-pthread-${RUN_ID}.zip`
   )
   await writeFile(nativeArchive, 'archive bytes')
   return { root, nativeRoot, wrapperRoot, nativeArchive }
 }
 
 describe('successor candidate freezing', () => {
-  it('derives a valid eight-asset main-script candidate without loading WASM', async () => {
+  it('derives a valid eight-asset no-pthread candidate without loading WASM', async () => {
     const paths = await fixture()
     const spec = await freezeCandidate({
       ...paths,
@@ -55,10 +55,7 @@ describe('successor candidate freezing', () => {
     expect(spec.assets.map((asset) => asset.path)).not.toContain(
       'wasm/soffice.data.js.metadata'
     )
-    expect(spec.runtime).toEqual({
-      pthreadWorkerMode: 'main-script',
-      externalWorker: null,
-    })
+    expect(spec.runtime).toEqual({ threading: 'none' })
     expect(deriveCandidateIdentity(spec)).toBe(spec.candidateId)
     expect(spec.expectedPayloadArchiveName).toBe(
       `libreoffice-wasm-runtime-${spec.candidateId}.zip`
