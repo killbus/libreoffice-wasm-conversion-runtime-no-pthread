@@ -52,6 +52,9 @@ jobs:
       - name: Test
         run: npx vitest run --exclude 'tests/*converter*.test.ts'
 
+      - name: DOCX to PDF smoke
+        run: npm run test:ci-conversion
+
       - name: Release
         run: npx semantic-release
         env:

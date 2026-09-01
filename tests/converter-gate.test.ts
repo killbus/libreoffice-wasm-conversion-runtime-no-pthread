@@ -17,8 +17,8 @@
  * (forks dist/subprocess.worker.cjs). Requires `npm run build` first so
  * that dist/ is present.
  *
- * Excluded from PR CI via the `tests/*converter*.test.ts` glob in
- * ci.yml / publish.yml. Run manually:
+ * Regular CI selects only the first DOCX→PDF smoke case from this file.
+ * Run the complete reuse and error-path gate manually with:
  *   npx vitest run tests/converter-gate.test.ts
  */
 

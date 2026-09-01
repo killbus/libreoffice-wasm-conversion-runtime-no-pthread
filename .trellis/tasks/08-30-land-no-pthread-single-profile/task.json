@@ -26,7 +26,7 @@
     "scripts/release-runtime/qualified-runtime-source.json",
     "scripts/release-runtime/restore-qualified.mjs"
   ],
-  "notes": "Qualified and published the single-profile no-pthread runtime from clean build 33412490741; removed pthread workers and cross-origin-isolation requirements; removed heavyweight runtime payloads from Git LFS; and moved CI, release, Pages, font, local build, and package flows to deterministic restoration from the pinned qualified public Release. Local runtime, browser, conversion, package, clean-tree, and focused contract gates passed, followed by PR CI.",
+  "notes": "Qualified and published the single-profile no-pthread runtime from clean build 33412490741; removed pthread workers and cross-origin-isolation requirements; removed heavyweight runtime payloads from Git LFS; and moved CI, release, Pages, font, local build, and package flows to deterministic restoration from the pinned qualified public Release. Local runtime, browser, conversion, package, clean-tree, and focused contract gates passed, followed by PR CI. Regular CI now also runs one real DOCX-to-PDF smoke conversion; the heavier reuse and multi-format matrix remain qualification gates.",
   "meta": {
     "nativeBuildRunId": "33412490741",
     "nativeBuildJobId": "99555169796",

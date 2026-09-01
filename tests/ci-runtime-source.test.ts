@@ -75,6 +75,19 @@ describe('release-only qualified runtime source', () => {
     }
   });
 
+  it('keeps one real DOCX to PDF conversion in regular CI', () => {
+    expect(packageJson.scripts['test:ci-conversion']).toContain(
+      'tests/converter-gate.test.ts',
+    );
+    expect(packageJson.scripts['test:ci-conversion']).toContain(
+      'converts test.docx to a valid PDF',
+    );
+    for (const path of ['.github/workflows/ci.yml', '.github/workflows/publish.yml']) {
+      const source = readText(path);
+      expect(source, path).toContain('npm run test:ci-conversion');
+    }
+  });
+
   it('keeps npm publication explicitly disarmed until credentials are configured', () => {
     const publishWorkflow = readText('.github/workflows/publish.yml');
     expect(publishWorkflow).toContain(

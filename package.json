@@ -72,6 +72,7 @@
     "dev:browser": "node dev-server.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
+    "test:ci-conversion": "vitest run tests/converter-gate.test.ts -t 'converts test.docx to a valid PDF' --maxWorkers=1 --minWorkers=1",
     "test:watch": "vitest",
     "test:browser": "playwright test",
     "test:browser:benchmark": "playwright test tests/browser/benchmark.spec.ts",
