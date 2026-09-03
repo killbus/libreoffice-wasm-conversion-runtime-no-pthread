@@ -470,10 +470,11 @@ const fontCleanupDebt = new Set<string>();
 let nativeOperationTail: Promise<void> = Promise.resolve();
 
 function getRuntimeIdentity(): FontProfileRuntimeIdentity {
+  const moduleIdentity = `${workerIdentity}:module:${moduleGeneration}`;
   return {
     worker: workerIdentity,
-    module: `${workerIdentity}:module:${moduleGeneration}`,
-    lok: lokBindings?.getIdentity() ?? `${workerIdentity}:lok:uninitialized`,
+    module: moduleIdentity,
+    lok: `${moduleIdentity}:${lokBindings?.getIdentity() ?? 'lok:uninitialized'}`,
   };
 }
 

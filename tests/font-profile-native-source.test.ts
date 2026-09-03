@@ -136,4 +136,13 @@ describe('native font profile source contract', () => {
       workerSource.indexOf('const authoritativeTarget = await calculateProfileFingerprint')
     );
   });
+
+  it('namespaces native pointer identities by Worker and Module generation', () => {
+    expect(workerSource).toContain(
+      'const moduleIdentity = `${workerIdentity}:module:${moduleGeneration}`;'
+    );
+    expect(workerSource).toContain(
+      "lok: `${moduleIdentity}:${lokBindings?.getIdentity() ?? 'lok:uninitialized'}`"
+    );
+  });
 });
