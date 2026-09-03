@@ -208,7 +208,7 @@ jobs:
           set -euo pipefail
           work_root="$RUNNER_TEMP/runtime-release"
           upload_root="$RUNNER_TEMP/runtime-release-upload"
-          mkdir -p "$upload_root"
+          mkdir -p "$work_root" "$upload_root"
           node scripts/release-runtime/pack.mjs \
             --native-root wasm \
             --wrapper-root . \
