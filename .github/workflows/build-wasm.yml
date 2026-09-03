@@ -23,7 +23,7 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 env:
@@ -205,8 +205,9 @@ jobs:
       - name: Stage qualified runtime draft Release
         if: ${{ success() && inputs.artifact_run_id != '' && inputs.stage_release_candidate }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RUNTIME_RELEASE_PAT }}
         run: |
+          test -n "$GH_TOKEN"
           node scripts/release-runtime/stage-draft.mjs \
             --native-root wasm \
             --wrapper-root . \
