@@ -25,7 +25,9 @@ const repositoryRoot = join(
   "..",
 );
 const qualificationSourcePaths = [
+  ".github/workflows/build-wasm.yml",
   "tests/browser/font-profile-lifecycle.spec.ts",
+  "tests/release-runtime/helpers/font-profile-evidence.ts",
   "src/browser.ts",
   "src/browser.worker.ts",
   "src/lok-bindings.ts",
@@ -103,13 +105,22 @@ async function fixture() {
       schemaVersion: 1,
       kind: "libreoffice-wasm-font-profile-qualification",
       githubActionsRunId: RUN_ID,
+      qualificationRunId: RUN_ID,
+      nativeBuildRunId: RUN_ID,
       nativeCommit: COMMIT_A,
+      wrapperCommit: COMMIT_B,
       ...environment,
       dynamicFontProfiles: 1,
       cacheDisabled: true,
       coreAssetsServedWithNoStore: true,
       serviceWorkersBypassed: true,
       profileCycles: 10,
+      browserCoreRequestCounts: {
+        "browser.worker.global.js": 1,
+        "soffice.js": 1,
+        "soffice.wasm": 1,
+        "soffice.data": 1,
+      },
       serverCoreRequestCounts: {
         "browser.worker.global.js": 1,
         "soffice.js": 1,
@@ -150,7 +161,10 @@ async function fixture() {
       schemaVersion: 1,
       kind: "libreoffice-wasm-font-profile-fault-qualification",
       githubActionsRunId: RUN_ID,
+      qualificationRunId: RUN_ID,
+      nativeBuildRunId: RUN_ID,
       nativeCommit: COMMIT_A,
+      wrapperCommit: COMMIT_B,
       ...environment,
       fault: "malformed-sfnt-after-valid-profile",
       mutationAttempted: true,
@@ -219,6 +233,26 @@ describe("successor candidate freezing", () => {
       join(paths.nativeRoot, "font-profile-qualification.json"),
       JSON.stringify({ schemaVersion: 1, kind: "unqualified" }),
     );
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/qualification evidence/);
+  });
+
+  it("rejects qualification-only evidence that reuses a different native run", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.nativeBuildRunId = "99999999999";
+    await writeFile(evidencePath, JSON.stringify(evidence));
 
     await expect(
       freezeCandidate({

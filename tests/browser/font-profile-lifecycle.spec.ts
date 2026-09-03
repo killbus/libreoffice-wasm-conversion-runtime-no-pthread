@@ -1,16 +1,15 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  createReadStream,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import type { FontProfileResult } from "../../src/types.js";
+import {
+  writeFontProfileFaultQualificationEvidence,
+  writeFontProfileQualificationEvidence,
+} from "../release-runtime/helpers/font-profile-evidence.js";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = path.join(testDirectory, "..", "fixtures-ci");
@@ -30,78 +29,6 @@ const coreAssetNames = new Set([
   "soffice.wasm",
   "soffice.data",
 ]);
-
-const repositoryRoot = path.join(testDirectory, "..", "..");
-const runtimeEvidenceFiles = {
-  "browser.js": path.join(repositoryRoot, "dist", "browser.js"),
-  "browser.worker.global.js": path.join(
-    repositoryRoot,
-    "dist",
-    "browser.worker.global.js",
-  ),
-  "soffice.js": path.join(repositoryRoot, "wasm", "soffice.js"),
-  "soffice.wasm": path.join(repositoryRoot, "wasm", "soffice.wasm"),
-  "soffice.data": path.join(repositoryRoot, "wasm", "soffice.data"),
-} as const;
-const qualificationSourceFiles = {
-  "tests/browser/font-profile-lifecycle.spec.ts": path.join(
-    testDirectory,
-    "font-profile-lifecycle.spec.ts",
-  ),
-  "src/browser.ts": path.join(repositoryRoot, "src", "browser.ts"),
-  "src/browser.worker.ts": path.join(
-    repositoryRoot,
-    "src",
-    "browser.worker.ts",
-  ),
-  "src/lok-bindings.ts": path.join(repositoryRoot, "src", "lok-bindings.ts"),
-  "build/patches/wasm-font-removal-primitives.patch": path.join(
-    repositoryRoot,
-    "build",
-    "patches",
-    "wasm-font-removal-primitives.patch",
-  ),
-  "build/patches/wasm-font-profile-abi.patch": path.join(
-    repositoryRoot,
-    "build",
-    "patches",
-    "wasm-font-profile-abi.patch",
-  ),
-} as const;
-
-async function sha256File(filePath: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
-  return hash.digest("hex");
-}
-
-async function hashEvidenceFiles(
-  files: Readonly<Record<string, string>>,
-): Promise<Record<string, string>> {
-  return Object.fromEntries(
-    await Promise.all(
-      Object.entries(files).map(async ([name, filePath]) => [
-        name,
-        await sha256File(filePath),
-      ]),
-    ),
-  );
-}
-
-async function qualificationEnvironment(
-  browserName: string,
-  browserVersion: string,
-) {
-  const [runtimeAssetSha256, qualificationSourceSha256] = await Promise.all([
-    hashEvidenceFiles(runtimeEvidenceFiles),
-    hashEvidenceFiles(qualificationSourceFiles),
-  ]);
-  return {
-    browser: { name: browserName, version: browserVersion },
-    runtimeAssetSha256,
-    qualificationSourceSha256,
-  };
-}
 
 async function rasterSha256(
   base64: string | undefined,
@@ -478,65 +405,46 @@ test.describe("dynamic font profile qualification", () => {
 
     const identity = result.transitions[0]?.identity;
     expect(identity).toBeDefined();
-    const environment = await qualificationEnvironment(
-      browser.browserType().name(),
-      browser.version(),
-    );
-    writeFileSync(
-      path.join(
-        testDirectory,
-        "..",
-        "..",
-        "wasm",
-        "font-profile-qualification.json",
-      ),
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          kind: "libreoffice-wasm-font-profile-qualification",
-          githubActionsRunId: process.env.GITHUB_RUN_ID ?? "local",
-          nativeCommit: process.env.GITHUB_SHA ?? "local",
-          ...environment,
-          dynamicFontProfiles: 1,
-          cacheDisabled: true,
-          coreAssetsServedWithNoStore: true,
-          serviceWorkersBypassed: true,
-          profileCycles: 10,
-          browserCoreRequestCounts,
-          serverCoreRequestCounts,
-          serverRequests,
-          workerLifecycle: {
-            created: workerCreateCount,
-            closedAfterDestroy: workerCloseCount,
-          },
-          runtimeIdentity: identity,
-          stableRuntimeIdentity: true,
-          cleanupDebtFree: true,
-          profileFileCounts: result.transitions.map(
-            (transition) => transition.diagnostics.profileFileCount,
-          ),
-          wasmHeapBytes: {
-            min: Math.min(...warmedHeapSizes),
-            max: Math.max(...warmedHeapSizes),
-            range: Math.max(...warmedHeapSizes) - Math.min(...warmedHeapSizes),
-            limit: 64 * 1024 * 1024,
-          },
-          conversionBytes: result.conversionBytes,
-          sameFamilyReplacement: {
-            familyStyle: familyStyleA,
-            filename: result.replacement.filename,
-            fontSha256: [result.replacement.shaA, result.replacement.shaB],
-            rasterSha256: [
-              replacementAFirstRaster,
-              replacementBRaster,
-              replacementASecondRaster,
-            ],
-            verified: true,
-          },
+    await writeFontProfileQualificationEvidence(
+      { name: browser.browserType().name(), version: browser.version() },
+      {
+        dynamicFontProfiles: 1,
+        cacheDisabled: true,
+        coreAssetsServedWithNoStore: true,
+        serviceWorkersBypassed: true,
+        profileCycles: 10,
+        browserCoreRequestCounts,
+        serverCoreRequestCounts,
+        serverRequests,
+        workerLifecycle: {
+          created: workerCreateCount,
+          closedAfterDestroy: workerCloseCount,
         },
-        null,
-        2,
-      )}\n`,
+        runtimeIdentity: identity,
+        stableRuntimeIdentity: true,
+        cleanupDebtFree: true,
+        profileFileCounts: result.transitions.map(
+          (transition) => transition.diagnostics.profileFileCount,
+        ),
+        wasmHeapBytes: {
+          min: Math.min(...warmedHeapSizes),
+          max: Math.max(...warmedHeapSizes),
+          range: Math.max(...warmedHeapSizes) - Math.min(...warmedHeapSizes),
+          limit: 64 * 1024 * 1024,
+        },
+        conversionBytes: result.conversionBytes,
+        sameFamilyReplacement: {
+          familyStyle: familyStyleA,
+          filename: result.replacement.filename,
+          fontSha256: [result.replacement.shaA, result.replacement.shaB],
+          rasterSha256: [
+            replacementAFirstRaster,
+            replacementBRaster,
+            replacementASecondRaster,
+          ],
+          verified: true,
+        },
+      },
     );
   });
   test("quarantines the Worker after a native mutation failure", async ({
@@ -641,40 +549,21 @@ test.describe("dynamic font profile qualification", () => {
     for (const assetName of coreAssetNames)
       expect(serverCoreRequestCounts[assetName], assetName).toBe(1);
 
-    const environment = await qualificationEnvironment(
-      browser.browserType().name(),
-      browser.version(),
-    );
-    writeFileSync(
-      path.join(
-        testDirectory,
-        "..",
-        "..",
-        "wasm",
-        "font-profile-fault-qualification.json",
-      ),
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          kind: "libreoffice-wasm-font-profile-fault-qualification",
-          githubActionsRunId: process.env.GITHUB_RUN_ID ?? "local",
-          nativeCommit: process.env.GITHUB_SHA ?? "local",
-          ...environment,
-          fault: "malformed-sfnt-after-valid-profile",
-          mutationAttempted: result.failed.mutation.attempted,
-          mutationCommitted: result.failed.mutation.committed,
-          stateKnown: result.failed.stateKnown,
-          runtimeReusable: result.failed.runtimeReusable,
-          quarantine: result.failed.quarantine,
-          workerLifecycle: {
-            created: workerCreateCount,
-            closedAfterQuarantine: workerCloseCount,
-          },
-          serverCoreRequestCounts,
+    await writeFontProfileFaultQualificationEvidence(
+      { name: browser.browserType().name(), version: browser.version() },
+      {
+        fault: "malformed-sfnt-after-valid-profile",
+        mutationAttempted: result.failed.mutation.attempted,
+        mutationCommitted: result.failed.mutation.committed,
+        stateKnown: result.failed.stateKnown,
+        runtimeReusable: result.failed.runtimeReusable,
+        quarantine: result.failed.quarantine,
+        workerLifecycle: {
+          created: workerCreateCount,
+          closedAfterQuarantine: workerCloseCount,
         },
-        null,
-        2,
-      )}\n`,
+        serverCoreRequestCounts,
+      },
     );
   });
 });

@@ -102,6 +102,25 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.artifact_run_id }}
 
+      - name: Resolve runtime provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "$ARTIFACT_RUN_ID" ]; then
+            NATIVE_BUILD_HEAD_SHA="$(bash scripts/retry-command.sh gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}" --jq .head_sha)"
+            NATIVE_BUILD_RUN_ID="$ARTIFACT_RUN_ID"
+          else
+            NATIVE_BUILD_HEAD_SHA="$GITHUB_SHA"
+            NATIVE_BUILD_RUN_ID="$GITHUB_RUN_ID"
+          fi
+          {
+            echo "NATIVE_BUILD_HEAD_SHA=$NATIVE_BUILD_HEAD_SHA"
+            echo "NATIVE_BUILD_RUN_ID=$NATIVE_BUILD_RUN_ID"
+          } >> "$GITHUB_ENV"
+
       - name: Verify no-pthread runtime contract
         run: npm run verify:no-pthread
 

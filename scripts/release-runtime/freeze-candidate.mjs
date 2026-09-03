@@ -39,9 +39,14 @@ const QUALIFICATION_RUNTIME_ASSET_NAMES = [
   "soffice.data",
 ];
 const QUALIFICATION_SOURCE_FILES = new Map([
+  [".github/workflows/build-wasm.yml", ".github/workflows/build-wasm.yml"],
   [
     "tests/browser/font-profile-lifecycle.spec.ts",
     "tests/browser/font-profile-lifecycle.spec.ts",
+  ],
+  [
+    "tests/release-runtime/helpers/font-profile-evidence.ts",
+    "tests/release-runtime/helpers/font-profile-evidence.ts",
   ],
   ["src/browser.ts", "src/browser.ts"],
   ["src/browser.worker.ts", "src/browser.worker.ts"],
@@ -268,7 +273,10 @@ async function validateNativeRoot(nativeRoot, expected) {
     qualification?.schemaVersion !== 1 ||
     qualification?.kind !== "libreoffice-wasm-font-profile-qualification" ||
     qualification?.githubActionsRunId !== String(expected.runId) ||
+    qualification?.qualificationRunId !== String(expected.runId) ||
+    qualification?.nativeBuildRunId !== String(expected.runId) ||
     qualification?.nativeCommit !== expected.nativeCommit ||
+    qualification?.wrapperCommit !== expected.wrapperCommit ||
     qualification?.dynamicFontProfiles !== 1 ||
     qualification?.cacheDisabled !== true ||
     qualification?.coreAssetsServedWithNoStore !== true ||
@@ -290,6 +298,14 @@ async function validateNativeRoot(nativeRoot, expected) {
     qualification.profileFileCounts.length < qualification.profileCycles * 2 ||
     !qualification.profileFileCounts.every(
       (count, index) => count === (index % 2 === 0 ? 1 : 0),
+    ) ||
+    ![
+      "browser.worker.global.js",
+      "soffice.js",
+      "soffice.wasm",
+      "soffice.data",
+    ].every(
+      (assetName) => qualification?.browserCoreRequestCounts?.[assetName] === 1,
     ) ||
     ![
       "browser.worker.global.js",
@@ -337,7 +353,10 @@ async function validateNativeRoot(nativeRoot, expected) {
     faultQualification?.kind !==
       "libreoffice-wasm-font-profile-fault-qualification" ||
     faultQualification?.githubActionsRunId !== String(expected.runId) ||
+    faultQualification?.qualificationRunId !== String(expected.runId) ||
+    faultQualification?.nativeBuildRunId !== String(expected.runId) ||
     faultQualification?.nativeCommit !== expected.nativeCommit ||
+    faultQualification?.wrapperCommit !== expected.wrapperCommit ||
     faultQualification?.fault !== "malformed-sfnt-after-valid-profile" ||
     faultQualification?.mutationAttempted !== true ||
     faultQualification?.mutationCommitted !== false ||
@@ -377,6 +396,7 @@ export async function freezeCandidate(options) {
   const qualificationEvidence = await validateNativeRoot(nativeRoot, {
     runId: options.runId,
     nativeCommit: options.nativeCommit,
+    wrapperCommit: options.wrapperCommit,
   });
   const archive = await inspectRegularFile(nativeArchive, "native archive");
   const assets = [];
