@@ -16,8 +16,8 @@ on:
         required: false
         type: string
         default: ""
-      stage_release_candidate:
-        description: "After reused-artifact qualification, stage the frozen candidate as a draft Release"
+      package_release_candidate:
+        description: "After reused-artifact qualification, package the frozen candidate for release"
         required: false
         type: boolean
         default: false
@@ -107,8 +107,8 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.artifact_run_id }}
 
-      - name: Validate release-staging inputs
-        if: ${{ inputs.stage_release_candidate }}
+      - name: Validate release-packaging inputs
+        if: ${{ inputs.package_release_candidate }}
         run: |
           set -euo pipefail
           test -n "${{ inputs.artifact_run_id }}"
@@ -202,20 +202,36 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Stage qualified runtime draft Release
-        if: ${{ success() && inputs.artifact_run_id != '' && inputs.stage_release_candidate }}
-        env:
-          GH_TOKEN: ${{ secrets.RUNTIME_RELEASE_PAT }}
+      - name: Package qualified runtime candidate
+        if: ${{ success() && inputs.artifact_run_id != '' && inputs.package_release_candidate }}
         run: |
-          test -n "$GH_TOKEN"
-          node scripts/release-runtime/stage-draft.mjs \
+          set -euo pipefail
+          work_root="$RUNNER_TEMP/runtime-release"
+          upload_root="$RUNNER_TEMP/runtime-release-upload"
+          mkdir -p "$upload_root"
+          node scripts/release-runtime/pack.mjs \
             --native-root wasm \
             --wrapper-root . \
-            --work-root "$RUNNER_TEMP/runtime-release" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$NATIVE_BUILD_HEAD_SHA" \
+            --work-root "$work_root" \
             --spec scripts/release-runtime/pending-candidate-spec.json \
-            --expected-candidate-id 85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190
+            --expected-candidate-id 85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190 \
+            > "$work_root/pack-result.json"
+          archive_path="$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).archivePath)" "$work_root/pack-result.json")"
+          output_root="$(dirname "$archive_path")"
+          cp "$archive_path" "$upload_root/"
+          cp "$output_root/CANDIDATE-MANIFEST.json" "$upload_root/"
+          cp "$output_root/ASSET-SHA256SUMS" "$upload_root/"
+          cp "$output_root/SHA256SUMS" "$upload_root/"
+          cp "$work_root/ASSEMBLY-REPORT.json" "$upload_root/"
+
+      - name: Upload packaged runtime candidate
+        if: ${{ success() && inputs.artifact_run_id != '' && inputs.package_release_candidate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190
+          path: ${{ runner.temp }}/runtime-release-upload/
+          retention-days: 3
+          if-no-files-found: error
 
       - name: Upload failed-build diagnostics
         if: failure()
