@@ -11,6 +11,8 @@ export type {
   ConversionOptions,
   ConversionResult,
   FontData,
+  FontProfileRequest,
+  FontProfileResult,
   FilterOptions,
   ImageOptions,
   InputFormat,
@@ -24,17 +26,24 @@ export type {
   WasmLoadPhase,
   WasmLoadProgress,
   ILibreOfficeConverter,
+  IFontProfileConverter,
 } from './types.js';
 
 export {
   ConversionError,
   ConversionErrorCode,
+  EMPTY_FONT_PROFILE_FINGERPRINT,
+  FONT_PROFILE_SCHEMA_VERSION,
   FORMAT_FILTERS,
   FORMAT_MIME_TYPES,
   EXTENSION_TO_FORMAT,
   createWasmPaths,
   DEFAULT_WASM_BASE_URL,
 } from './types.js';
+
+export const LIBREOFFICE_BROWSER_CAPABILITIES = Object.freeze({
+  dynamicFontProfiles: 1 as const,
+});
 
 // Font loading utilities (browser-compatible)
 export { loadFontsFromUrl } from './font-loader.browser.js';
@@ -69,6 +78,9 @@ import {
   EditorOperationResult,
   WasmLoadProgress,
   WasmLoadPhase,
+  FontProfileRequest,
+  FontProfileResult,
+  IFontProfileConverter,
 } from './types.js';
 
 import {
@@ -119,7 +131,7 @@ interface EditorSessionInfo {
 
 /** Worker response message types */
 interface WorkerResponse {
-  type: 'loaded' | 'ready' | 'progress' | 'result' | 'error' | 'pageCount' | 'previews' | 'singlePagePreview' | 'fullQualityPagePreview' | 'documentInfo' | 'lokInfo' | 'editResult' | 'pageRectangles' | 'testLokOperations' | 'editorSession' | 'editorOperationResult' | 'documentClosed';
+  type: 'loaded' | 'ready' | 'progress' | 'result' | 'error' | 'pageCount' | 'previews' | 'singlePagePreview' | 'fullQualityPagePreview' | 'documentInfo' | 'lokInfo' | 'editResult' | 'pageRectangles' | 'testLokOperations' | 'editorSession' | 'editorOperationResult' | 'documentClosed' | 'fontProfileResult';
   id: number;
   data?: Uint8Array;
   error?: string;
@@ -136,6 +148,7 @@ interface WorkerResponse {
   editorSession?: EditorSessionInfo;
   editorOperationResult?: unknown;
   quarantine?: boolean;
+  fontProfileResult?: FontProfileResult;
 }
 
 /**
@@ -626,7 +639,7 @@ class BrowserConverter {
  * Runs WASM module in a Web Worker to avoid blocking the main thread.
  * Implements ILibreOfficeConverter for consistent API across platforms.
  */
-class WorkerBrowserConverter implements ILibreOfficeConverter {
+class WorkerBrowserConverter implements IFontProfileConverter {
   private worker: Worker | null = null;
   private initialized = false;
   private initializing = false;
@@ -823,10 +836,25 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
       pending.resolve(msg.editorOperationResult);
     } else if (msg.type === 'documentClosed') {
       pending.resolve(msg.data);
+    } else if (msg.type === 'fontProfileResult') {
+      pending.resolve(msg.fontProfileResult);
+      if (msg.fontProfileResult?.quarantine) {
+        this.discardWorker(
+          new ConversionError(
+            ConversionErrorCode.CONVERSION_FAILED,
+            `Font profile transition ${msg.fontProfileResult.transitionId} quarantined the runtime`
+          ),
+          true
+        );
+      }
     }
   }
 
-  private sendMessage(type: string, data: Record<string, unknown> = {}): Promise<unknown> {
+  private sendMessage(
+    type: string,
+    data: Record<string, unknown> = {},
+    transfer: Transferable[] = []
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const worker = this.worker;
       if (!worker) {
@@ -845,6 +873,9 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
           copy.set(data.inputData);
           const message = { type, id, ...data, inputData: copy };
           worker.postMessage(message, [copy.buffer]);
+        } else if (transfer.length > 0) {
+          const message = { type, id, ...data };
+          worker.postMessage(message, transfer);
         } else {
           const message = { type, id, ...data };
           worker.postMessage(message);
@@ -854,6 +885,26 @@ class WorkerBrowserConverter implements ILibreOfficeConverter {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  async setFontProfile(profile: FontProfileRequest): Promise<FontProfileResult> {
+    if (!this.initialized || !this.worker) {
+      throw new ConversionError(ConversionErrorCode.WASM_NOT_INITIALIZED, 'Not initialized');
+    }
+
+    const fonts = profile.fonts.map((font) => {
+      const source = font.data instanceof Uint8Array
+        ? font.data
+        : new Uint8Array(font.data);
+      const data = source.slice().buffer;
+      return { filename: font.filename, sha256: font.sha256, data };
+    });
+
+    return this.sendMessage(
+      'setFontProfile',
+      { profile: { ...profile, fonts } },
+      fonts.map((font) => font.data)
+    ) as Promise<FontProfileResult>;
   }
 
   /**
@@ -1692,8 +1743,20 @@ export function createBrowserConverter(
 /** Create an uninitialized Worker-owned conversion-only browser facade. */
 export function createWorkerBrowserConverter(
   options: WorkerBrowserConverterOptions = {}
-): ILibreOfficeConverter {
-  return exposeConversionOnly(new WorkerBrowserConverter(options));
+): IFontProfileConverter {
+  const runtime = new WorkerBrowserConverter(options);
+  return Object.freeze({
+    initialize: () => runtime.initialize(),
+    convert: (
+      input: Uint8Array | ArrayBuffer,
+      conversionOptions: ConversionOptions,
+      filename?: string
+    ) =>
+      runtime.convert(input, conversionOptions, filename),
+    setFontProfile: (profile: FontProfileRequest) => runtime.setFontProfile(profile),
+    destroy: () => runtime.destroy(),
+    isReady: () => runtime.isReady(),
+  });
 }
 
 /**

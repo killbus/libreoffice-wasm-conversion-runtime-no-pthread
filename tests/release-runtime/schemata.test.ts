@@ -1,188 +1,325 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from "vitest";
 import {
   validateFrozenSpec,
   validateCandidateManifest,
   validateStagingReport,
   validateAcceptanceReceipt,
+  REQUIRED_ACCEPTANCE_GATES,
   validateReleaseManifest,
   SchemaError,
-} from '../../scripts/release-runtime/lib/schemata.mjs'
-import { makeSyntheticCandidate } from './helpers/synthetic-candidate.mjs'
+} from "../../scripts/release-runtime/lib/schemata.mjs";
+import { makeSyntheticCandidate } from "./helpers/synthetic-candidate.mjs";
 
 async function withSynthetic(run) {
-  const synth = await makeSyntheticCandidate()
+  const synth = await makeSyntheticCandidate();
   try {
-    return await run(synth)
+    return await run(synth);
   } finally {
-    await synth.dispose()
+    await synth.dispose();
   }
 }
 
-describe('frozen spec schema negatives', () => {
-  it('rejects a forbidden standalone worker in the asset set', async () => {
+describe("frozen spec schema negatives", () => {
+  it("rejects a forbidden standalone worker in the asset set", async () => {
     await withSynthetic(async ({ spec }) => {
       const bad = {
         ...spec,
         assets: spec.assets.map((asset, index) =>
           index === 0
-            ? { ...asset, path: 'nested/runtime/soffice.worker.js' }
-            : asset
+            ? { ...asset, path: "nested/runtime/soffice.worker.js" }
+            : asset,
         ),
-      }
-      expect(() => validateFrozenSpec(bad)).toThrow(SchemaError)
+      };
+      expect(() => validateFrozenSpec(bad)).toThrow(SchemaError);
       expect(() => validateFrozenSpec(bad)).toThrow(
-        /frozen spec must not contain soffice\.worker\.js/
-      )
-    })
-  })
+        /frozen spec must not contain soffice\.worker\.js/,
+      );
+    });
+  });
 
-  it('rejects a wrong asset count', async () => {
+  it("rejects a wrong asset count", async () => {
     await withSynthetic(async ({ spec }) => {
-      expect(() => validateFrozenSpec({ ...spec, assets: spec.assets.slice(0, 7) })).toThrow(SchemaError)
-    })
-  })
+      expect(() =>
+        validateFrozenSpec({ ...spec, assets: spec.assets.slice(0, 7) }),
+      ).toThrow(SchemaError);
+    });
+  });
 
-  it('rejects malformed commits, run IDs, ABI, and bytes', async () => {
+  it("accepts only the versioned dynamic font profile capability", async () => {
+    await withSynthetic(async ({ spec }) => {
+      expect(
+        validateFrozenSpec({
+          ...spec,
+          runtime: {
+            threading: "none",
+            capabilities: { dynamicFontProfiles: 1 },
+          },
+        }).runtime,
+      ).toEqual({
+        threading: "none",
+        capabilities: { dynamicFontProfiles: 1 },
+      });
+      expect(() =>
+        validateFrozenSpec({
+          ...spec,
+          runtime: {
+            threading: "none",
+            capabilities: { dynamicFontProfiles: 2 },
+          },
+        }),
+      ).toThrow(/dynamicFontProfiles: 1/);
+    });
+  });
+
+  it("rejects malformed commits, run IDs, ABI, and bytes", async () => {
     await withSynthetic(async ({ spec }) => {
       expect(() =>
         validateFrozenSpec({
           ...spec,
-          provenance: { ...spec.provenance, native: { ...spec.provenance.native, commit: 'not-a-commit' } },
-        })
-      ).toThrow(SchemaError)
+          provenance: {
+            ...spec.provenance,
+            native: { ...spec.provenance.native, commit: "not-a-commit" },
+          },
+        }),
+      ).toThrow(SchemaError);
       expect(() =>
         validateFrozenSpec({
           ...spec,
-          provenance: { ...spec.provenance, native: { ...spec.provenance.native, githubActionsRunId: 'abc' } },
-        })
-      ).toThrow(SchemaError)
+          provenance: {
+            ...spec.provenance,
+            native: { ...spec.provenance.native, githubActionsRunId: "abc" },
+          },
+        }),
+      ).toThrow(SchemaError);
       expect(() =>
         validateFrozenSpec({
           ...spec,
-          provenance: { ...spec.provenance, native: { ...spec.provenance.native, schemaVersion: 0 } },
-        })
-      ).toThrow(SchemaError)
+          provenance: {
+            ...spec.provenance,
+            native: { ...spec.provenance.native, schemaVersion: 0 },
+          },
+        }),
+      ).toThrow(SchemaError);
       expect(() =>
-        validateFrozenSpec({ ...spec, assets: [{ ...spec.assets[0], bytes: -1 }] })
-      ).toThrow(SchemaError)
-    })
-  })
+        validateFrozenSpec({
+          ...spec,
+          assets: [{ ...spec.assets[0], bytes: -1 }],
+        }),
+      ).toThrow(SchemaError);
+    });
+  });
 
-  it('requires the sole no-pthread runtime marker', async () => {
+  it("requires the sole no-pthread runtime marker", async () => {
     await withSynthetic(async ({ spec }) => {
-      expect(() => validateFrozenSpec({ ...spec, runtime: { threading: 'pthread' } }))
-        .toThrow(/runtime threading must be none/)
-      expect(() => validateFrozenSpec({
-        ...spec,
-        runtime: { threading: 'none', pthreadWorkerMode: 'main-script' },
-      })).toThrow(/legacy pthread runtime metadata is not accepted/)
-    })
-  })
-})
+      expect(() =>
+        validateFrozenSpec({ ...spec, runtime: { threading: "pthread" } }),
+      ).toThrow(/runtime threading must be none/);
+      expect(() =>
+        validateFrozenSpec({
+          ...spec,
+          runtime: { threading: "none", pthreadWorkerMode: "main-script" },
+        }),
+      ).toThrow(/legacy pthread runtime metadata is not accepted/);
+    });
+  });
+});
 
-describe('candidate manifest schema', () => {
-  it('rejects a forbidden standalone worker at any asset depth', async () => {
+describe("candidate manifest schema", () => {
+  it("rejects a forbidden standalone worker at any asset depth", async () => {
     await withSynthetic(async ({ spec }) => {
-      const assets = spec.assets.map(({ sourceRoot: _sourceRoot, sourcePath: _sourcePath, ...asset }, index) =>
-        index === 0
-          ? { ...asset, path: 'nested/runtime/soffice.worker.js' }
-          : asset
-      )
+      const assets = spec.assets.map(
+        (
+          { sourceRoot: _sourceRoot, sourcePath: _sourcePath, ...asset },
+          index,
+        ) =>
+          index === 0
+            ? { ...asset, path: "nested/runtime/soffice.worker.js" }
+            : asset,
+      );
       const manifest = {
         schemaVersion: 1,
-        kind: 'pdfhow-libreoffice-runtime-candidate',
+        kind: "pdfhow-libreoffice-runtime-candidate",
         candidateId: spec.candidateId,
         releaseQualified: false,
         provenance: spec.provenance,
         runtime: spec.runtime,
         assets,
-      }
+      };
 
       expect(() => validateCandidateManifest(manifest)).toThrow(
-        /candidate manifest must not contain soffice\.worker\.js/
-      )
-    })
-  })
+        /candidate manifest must not contain soffice\.worker\.js/,
+      );
+    });
+  });
 
-  it('rejects a candidate manifest that claims qualification', () => {
+  it("rejects a candidate manifest that claims qualification", () => {
     expect(() =>
       validateCandidateManifest({
         schemaVersion: 1,
-        kind: 'pdfhow-libreoffice-runtime-candidate',
-        candidateId: 'a'.repeat(64),
+        kind: "pdfhow-libreoffice-runtime-candidate",
+        candidateId: "a".repeat(64),
         releaseQualified: true,
-        provenance: { native: { commit: 'a'.repeat(40), githubActionsRunId: '1', abi: 'x', schemaVersion: 1 }, wrapper: { commit: 'b'.repeat(40) } },
-        runtime: { threading: 'none' },
+        provenance: {
+          native: {
+            commit: "a".repeat(40),
+            githubActionsRunId: "1",
+            abi: "x",
+            schemaVersion: 1,
+          },
+          wrapper: { commit: "b".repeat(40) },
+        },
+        runtime: { threading: "none" },
         assets: [],
-      })
-    ).toThrow(SchemaError)
-  })
+      }),
+    ).toThrow(SchemaError);
+  });
 
-  it('rejects a candidate manifest containing source paths or timestamps', () => {
+  it("rejects a candidate manifest containing source paths or timestamps", () => {
     const base = {
       schemaVersion: 1,
-      kind: 'pdfhow-libreoffice-runtime-candidate',
-      candidateId: 'a'.repeat(64),
+      kind: "pdfhow-libreoffice-runtime-candidate",
+      candidateId: "a".repeat(64),
       releaseQualified: false,
-      provenance: { native: { commit: 'a'.repeat(40), githubActionsRunId: '1', abi: 'x', schemaVersion: 1 }, wrapper: { commit: 'b'.repeat(40) } },
-      runtime: { threading: 'none' },
+      provenance: {
+        native: {
+          commit: "a".repeat(40),
+          githubActionsRunId: "1",
+          abi: "x",
+          schemaVersion: 1,
+        },
+        wrapper: { commit: "b".repeat(40) },
+      },
+      runtime: { threading: "none" },
       assets: [],
-    }
+    };
     expect(() =>
-      validateCandidateManifest({ ...base, sources: { nativeRoot: 'D:\\tmp\\x', wrapperRoot: 'D:\\tmp\\y' } })
-    ).toThrow(/source paths/)
-    expect(() => validateCandidateManifest({ ...base, timestamp: '2026-08-10T00:00:00Z' })).toThrow(/timestamps/)
-  })
+      validateCandidateManifest({
+        ...base,
+        sources: { nativeRoot: "D:\\tmp\\x", wrapperRoot: "D:\\tmp\\y" },
+      }),
+    ).toThrow(/source paths/);
+    expect(() =>
+      validateCandidateManifest({ ...base, timestamp: "2026-08-10T00:00:00Z" }),
+    ).toThrow(/timestamps/);
+  });
 
-  it('rejects a wrong kind/schema manifest', () => {
+  it("rejects a wrong kind/schema manifest", () => {
     expect(() =>
-      validateCandidateManifest({ schemaVersion: 9, kind: 'something-else', candidateId: 'a'.repeat(64) })
-    ).toThrow(SchemaError)
-  })
-})
+      validateCandidateManifest({
+        schemaVersion: 9,
+        kind: "something-else",
+        candidateId: "a".repeat(64),
+      }),
+    ).toThrow(SchemaError);
+  });
+});
 
-describe('control record kinds are distinct', () => {
-  it('staging report must be its own kind and unqualified', () => {
+describe("control record kinds are distinct", () => {
+  it("staging report must be its own kind and unqualified", () => {
     expect(() =>
-      validateStagingReport({ schemaVersion: 1, kind: 'libreoffice-wasm-runtime-staging-report', candidateId: 'a'.repeat(64) })
-    ).toThrow(/tagName/)
+      validateStagingReport({
+        schemaVersion: 1,
+        kind: "libreoffice-wasm-runtime-staging-report",
+        candidateId: "a".repeat(64),
+      }),
+    ).toThrow(/tagName/);
     const good = {
       schemaVersion: 1,
-      kind: 'libreoffice-wasm-runtime-staging-report',
-      candidateId: 'a'.repeat(64),
-      tagName: 'runtime-artifact-abc',
-      targetCommit: 'a'.repeat(40),
-      releaseId: '123',
-      releaseUrl: 'https://github.com/x/y/releases/tag/rt',
-      payloadArchiveSha256: 'b'.repeat(64),
-      assets: [{ name: 'x.zip', uploadUrl: 'https://example/x', sha256: 'c'.repeat(64) }],
-    }
-    expect(validateStagingReport(good).kind).toBe('libreoffice-wasm-runtime-staging-report')
-    expect(() => validateStagingReport({ ...good, releaseQualified: true })).toThrow(/must not claim/)
-  })
-
-  it('acceptance receipt wants accepted/rejected and binding fields', () => {
+      kind: "libreoffice-wasm-runtime-staging-report",
+      candidateId: "a".repeat(64),
+      tagName: "runtime-artifact-abc",
+      targetCommit: "a".repeat(40),
+      releaseId: "123",
+      releaseUrl: "https://github.com/x/y/releases/tag/rt",
+      payloadArchiveSha256: "b".repeat(64),
+      assets: [
+        {
+          name: "x.zip",
+          uploadUrl: "https://example/x",
+          sha256: "c".repeat(64),
+        },
+      ],
+    };
+    expect(validateStagingReport(good).kind).toBe(
+      "libreoffice-wasm-runtime-staging-report",
+    );
     expect(() =>
-      validateAcceptanceReceipt({ schemaVersion: 1, kind: 'libreoffice-wasm-runtime-acceptance-receipt', decision: 'maybe' })
-    ).toThrow(/accepted\/rejected/)
-  })
+      validateStagingReport({ ...good, releaseQualified: true }),
+    ).toThrow(/must not claim/);
+  });
 
-  it('releaseQualified:true is valid ONLY in a release manifest kind', () => {
+  it("acceptance receipt wants accepted/rejected and binding fields", () => {
     expect(() =>
-      validateReleaseManifest({ schemaVersion: 1, kind: 'libreoffice-wasm-runtime-release-manifest' })
-    ).toThrow(/releaseQualified: true/)
+      validateAcceptanceReceipt({
+        schemaVersion: 1,
+        kind: "libreoffice-wasm-runtime-acceptance-receipt",
+        decision: "maybe",
+      }),
+    ).toThrow(/accepted\/rejected/);
+  });
+
+  it("requires named mandatory passing gates for accepted receipts", () => {
+    const receipt = {
+      schemaVersion: 1,
+      kind: "libreoffice-wasm-runtime-acceptance-receipt",
+      decision: "accepted",
+      candidateId: "a".repeat(64),
+      payloadArchiveSha256: "b".repeat(64),
+      releaseId: "123",
+      releaseUrl: "https://github.com/x/y/releases/tag/rt",
+      tagName: "runtime-artifact-abc",
+      targetCommit: "c".repeat(40),
+      verifierVersion: "1",
+      acceptanceOwner: "independent-reviewer",
+      generatedAt: "2026-09-02T00:00:00.000Z",
+      gateResults: REQUIRED_ACCEPTANCE_GATES.map((name) => ({
+        name,
+        status: "passed",
+      })),
+    };
+
+    expect(validateAcceptanceReceipt(receipt).decision).toBe("accepted");
+    expect(() =>
+      validateAcceptanceReceipt({
+        ...receipt,
+        gateResults: receipt.gateResults.slice(1),
+      }),
+    ).toThrow(/missing required gates/);
+    expect(() =>
+      validateAcceptanceReceipt({
+        ...receipt,
+        gateResults: receipt.gateResults.map((gate, index) =>
+          index === 0 ? { ...gate, status: "failed" } : gate,
+        ),
+      }),
+    ).toThrow(/non-passing gates/);
+    expect(() =>
+      validateAcceptanceReceipt({
+        ...receipt,
+        gateResults: [...receipt.gateResults, receipt.gateResults[0]],
+      }),
+    ).toThrow(/duplicate gate/);
+  });
+
+  it("releaseQualified:true is valid ONLY in a release manifest kind", () => {
+    expect(() =>
+      validateReleaseManifest({
+        schemaVersion: 1,
+        kind: "libreoffice-wasm-runtime-release-manifest",
+      }),
+    ).toThrow(/releaseQualified: true/);
     const good = {
       schemaVersion: 1,
-      kind: 'libreoffice-wasm-runtime-release-manifest',
+      kind: "libreoffice-wasm-runtime-release-manifest",
       releaseQualified: true,
-      candidateId: 'a'.repeat(64),
-      payloadArchiveSha256: 'b'.repeat(64),
-      candidateManifestSha256: 'c'.repeat(64),
-      acceptanceReceiptSha256: 'd'.repeat(64),
-      releaseId: '123',
-      targetCommit: 'a'.repeat(40),
-      assets: [{ name: 'x.zip', sha256: 'b'.repeat(64) }],
-    }
-    expect(validateReleaseManifest(good).releaseQualified).toBe(true)
-  })
-})
+      candidateId: "a".repeat(64),
+      payloadArchiveSha256: "b".repeat(64),
+      candidateManifestSha256: "c".repeat(64),
+      acceptanceReceiptSha256: "d".repeat(64),
+      releaseId: "123",
+      targetCommit: "a".repeat(40),
+      assets: [{ name: "x.zip", sha256: "b".repeat(64) }],
+    };
+    expect(validateReleaseManifest(good).releaseQualified).toBe(true);
+  });
+});

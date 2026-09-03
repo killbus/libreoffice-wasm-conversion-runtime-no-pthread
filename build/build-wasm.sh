@@ -182,12 +182,16 @@ CONVERSION_EXPORTS_PATCH="${SCRIPT_DIR}/patches/wasm-trim-lok-exports-conversion
 CONVERSION_SHIMS_PATCH="${SCRIPT_DIR}/patches/wasm-trim-lok-shims-conversion-only.patch"
 NATIVE_BRIDGE_PATCH="${SCRIPT_DIR}/patches/wasm-native-conversion-bridge.patch"
 NO_PTHREAD_PATCH="${SCRIPT_DIR}/patches/wasm-no-pthread-single-profile.patch"
+FONT_REMOVAL_PATCH="${SCRIPT_DIR}/patches/wasm-font-removal-primitives.patch"
+FONT_PROFILE_ABI_PATCH="${SCRIPT_DIR}/patches/wasm-font-profile-abi.patch"
 ACTIVE_PATCHES=(
     "$CONSOLIDATED_PATCH"
     "$CONVERSION_EXPORTS_PATCH"
     "$CONVERSION_SHIMS_PATCH"
     "$NATIVE_BRIDGE_PATCH"
     "$NO_PTHREAD_PATCH"
+    "$FONT_REMOVAL_PATCH"
+    "$FONT_PROFILE_ABI_PATCH"
 )
 
 # Clean if requested. A clean build also implies source normalization below.
@@ -291,6 +295,12 @@ apply_conversion_atom \
 apply_reviewed_patch \
     "wasm-no-pthread-single-profile.patch" \
     "$NO_PTHREAD_PATCH"
+apply_reviewed_patch \
+    "wasm-font-removal-primitives.patch" \
+    "$FONT_REMOVAL_PATCH"
+apply_reviewed_patch \
+    "wasm-font-profile-abi.patch" \
+    "$FONT_PROFILE_ABI_PATCH"
 
 EMSCRIPTEN_PLATFORM_FILE="${LO_DIR}/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk"
 if ! grep -Fqx 'gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))' \

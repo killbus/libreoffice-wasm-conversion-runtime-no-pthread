@@ -5,7 +5,20 @@
  * Communication is via postMessage.
  */
 
-import type { ConversionOptions, EditorOperationResult, EmscriptenModule, WasmLoadPhase, WasmLoadProgress } from './types.js';
+import {
+  EMPTY_FONT_PROFILE_FINGERPRINT,
+  FONT_PROFILE_SCHEMA_VERSION,
+  type ConversionOptions,
+  type EditorOperationResult,
+  type EmscriptenModule,
+  type FontProfileDiagnostics,
+  type FontProfileRequest,
+  type FontProfileResult,
+  type FontProfileRuntimeIdentity,
+  type NativeFontProfileManifestEntry,
+  type WasmLoadPhase,
+  type WasmLoadProgress,
+} from './types.js';
 import { LOKBindings } from './lok-bindings.js';
 import { buildLoadOptions } from './types.js';
 import {
@@ -262,7 +275,7 @@ function installProgressInterceptors() {
 }
 
 interface WorkerMessage {
-  type: 'init' | 'convert' | 'destroy' | 'getPageCount' | 'renderPreviews' | 'renderSinglePage' | 'renderPageViaConvert' | 'renderPageFullQuality' | 'getDocumentInfo' | 'getLokInfo' | 'editText' | 'renderPageRectangles' | 'testLokOperations' | 'openDocument' | 'editorOperation' | 'closeDocument';
+  type: 'init' | 'convert' | 'destroy' | 'getPageCount' | 'renderPreviews' | 'renderSinglePage' | 'renderPageViaConvert' | 'renderPageFullQuality' | 'getDocumentInfo' | 'getLokInfo' | 'editText' | 'renderPageRectangles' | 'testLokOperations' | 'openDocument' | 'editorOperation' | 'closeDocument' | 'setFontProfile';
   id: number;
   // Explicit WASM file paths (required for init)
   sofficeJs?: string;
@@ -294,6 +307,7 @@ interface WorkerMessage {
   sessionId?: string;
   editorMethod?: string;
   editorArgs?: unknown[];
+  profile?: FontProfileRequest;
 }
 
 interface PagePreview {
@@ -377,7 +391,7 @@ interface EditorSessionInfo {
 
 
 interface WorkerResponse {
-  type: 'ready' | 'progress' | 'result' | 'error' | 'pageCount' | 'previews' | 'singlePagePreview' | 'documentInfo' | 'lokInfo' | 'editResult' | 'pageRectangles' | 'testLokOperations' | 'editorSession' | 'editorOperationResult' | 'documentClosed';
+  type: 'ready' | 'progress' | 'result' | 'error' | 'pageCount' | 'previews' | 'singlePagePreview' | 'fullQualityPagePreview' | 'documentInfo' | 'lokInfo' | 'editResult' | 'pageRectangles' | 'testLokOperations' | 'editorSession' | 'editorOperationResult' | 'documentClosed' | 'fontProfileResult';
   id: number;
   data?: Uint8Array;
   error?: string;
@@ -393,6 +407,7 @@ interface WorkerResponse {
   editorSession?: EditorSessionInfo;
   editorOperationResult?: EditorOperationResult;
   quarantine?: boolean;
+  fontProfileResult?: FontProfileResult;
 }
 
 /** Web Worker global scope with Module property */
@@ -435,6 +450,171 @@ interface EditorSession {
 
 const editorSessions = new Map<string, EditorSession>();
 let sessionCounter = 0;
+
+interface ActiveFontRecord extends NativeFontProfileManifestEntry {}
+
+const FONT_PROFILE_ROOT = '/tmp/font-profiles/sha256';
+const FONT_PROFILE_EXTENSIONS = new Set(['otf', 'ttc', 'tte', 'ttf']);
+const FONT_PROFILE_MAX_FONTS = 128;
+const FONT_PROFILE_MAX_BYTES = 512 * 1024 * 1024;
+const workerIdentity = `worker:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+let moduleGeneration = 0;
+let activeFontFingerprint: string = EMPTY_FONT_PROFILE_FINGERPRINT;
+let activeFonts = new Map<string, ActiveFontRecord>();
+let dynamicFontProfileStateKnown = true;
+const fontCleanupDebt = new Set<string>();
+let nativeOperationTail: Promise<void> = Promise.resolve();
+
+function getRuntimeIdentity(): FontProfileRuntimeIdentity {
+  return {
+    worker: workerIdentity,
+    module: `${workerIdentity}:module:${moduleGeneration}`,
+    lok: lokBindings?.getIdentity() ?? `${workerIdentity}:lok:uninitialized`,
+  };
+}
+
+function createFontProfileDiagnostics(
+  stagedFontCount = 0,
+  retiredFontCount = 0,
+  cleanupDebtPaths: string[] = [],
+  messages: string[] = [],
+  native?: Record<string, unknown>
+): FontProfileDiagnostics {
+  return {
+    activeFontCount: activeFonts.size,
+    activeFontBytes: [...activeFonts.values()].reduce((total, font) => total + font.byteLength, 0),
+    stagedFontCount,
+    retiredFontCount,
+    cleanupDebtPaths,
+    profileFileCount: countFontProfileFiles(),
+    wasmHeapBytes: module?.HEAPU8?.buffer.byteLength,
+    native,
+    messages,
+  };
+}
+
+function fontProfileResult(
+  profile: FontProfileRequest,
+  overrides: Partial<FontProfileResult>
+): FontProfileResult {
+  return {
+    schemaVersion: FONT_PROFILE_SCHEMA_VERSION,
+    transitionId: profile.transitionId,
+    ok: false,
+    code: 'NATIVE_ERROR',
+    expectedActiveFingerprint: profile.expectedActiveFingerprint,
+    targetFingerprint: profile.targetFingerprint,
+    activeFingerprint: activeFontFingerprint,
+    appliedFingerprint: activeFontFingerprint,
+    addedCount: 0,
+    removedCount: 0,
+    mutation: { attempted: false, committed: false, stage: 'validate' },
+    rollback: { attempted: false, succeeded: null },
+    stateKnown: true,
+    runtimeReusable: true,
+    quarantine: false,
+    identity: getRuntimeIdentity(),
+    diagnostics: createFontProfileDiagnostics(),
+    ...overrides,
+  };
+}
+
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  const bytes = new Uint8Array(data.byteLength);
+  bytes.set(data);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes.buffer);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function calculateProfileFingerprint(
+  manifest: Array<Pick<NativeFontProfileManifestEntry, 'filename' | 'sha256'>>
+): Promise<string> {
+  const canonical = manifest
+    .map(({ filename, sha256 }) => ({ filename, sha256 }))
+    .sort((left, right) => left.filename.localeCompare(right.filename) || left.sha256.localeCompare(right.sha256));
+  return `sha256:${await sha256Hex(new TextEncoder().encode(JSON.stringify(canonical)))}`;
+}
+
+function ensureDirectory(path: string): void {
+  const parts = path.split('/').filter(Boolean);
+  let current = '';
+  for (const part of parts) {
+    current += `/${part}`;
+    try { module!.FS.mkdir(current); } catch { /* already exists */ }
+  }
+}
+
+function fontProfileExtension(filename: string): string {
+  const extension = filename.split('.').at(-1)?.toLowerCase();
+  if (!extension || !FONT_PROFILE_EXTENSIONS.has(extension)) {
+    throw new Error(`Unsupported native font extension: ${filename}`);
+  }
+  return extension;
+}
+
+function assertSfntHeader(filename: string, data: Uint8Array): void {
+  if (data.byteLength < 12) {
+    throw new Error(`Font file is too small to contain an SFNT header: ${filename}`);
+  }
+  const signature = String.fromCharCode(data[0]!, data[1]!, data[2]!, data[3]!);
+  const isTrueType = data[0] === 0x00 && data[1] === 0x01 && data[2] === 0x00 && data[3] === 0x00;
+  if (!isTrueType && signature !== 'OTTO' && signature !== 'ttcf' && signature !== 'true' && signature !== 'typ1') {
+    throw new Error(`Font file has an invalid SFNT signature: ${filename}`);
+  }
+}
+
+async function verifyImmutablePath(path: string, data: Uint8Array, sha256: string): Promise<boolean> {
+  try {
+    const existing = module!.FS.readFile(path) as Uint8Array;
+    if (await sha256Hex(existing) !== sha256) {
+      throw new Error(`Content-addressed font path collision: ${path}`);
+    }
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Content-addressed font path collision:')) {
+      throw error;
+    }
+    module!.FS.writeFile(path, data);
+    return true;
+  }
+}
+
+function countFontProfileFiles(): number {
+  try {
+    return module!.FS.readdir(FONT_PROFILE_ROOT).filter((name) => name !== '.' && name !== '..').length;
+  } catch {
+    return 0;
+  }
+}
+
+function cleanupStagedPaths(paths: string[]): string[] {
+  const activePaths = new Set([...activeFonts.values()].map((font) => font.path));
+  const candidates = new Set([...fontCleanupDebt, ...paths]);
+  for (const path of candidates) {
+    if (activePaths.has(path)) {
+      fontCleanupDebt.delete(path);
+      continue;
+    }
+    try {
+      module!.FS.unlink(path);
+      fontCleanupDebt.delete(path);
+    } catch {
+      fontCleanupDebt.add(path);
+    }
+  }
+  return [...fontCleanupDebt].sort();
+}
+
+function closeCachedDocumentStrict(): void {
+  if (!cachedDoc) return;
+  if (!lokBindings || !module) throw new Error('Cached document owner is unavailable');
+  const closing = cachedDoc;
+  lokBindings.documentDestroy(closing.docPtr);
+  module.FS.unlink(closing.filePath);
+  cachedDoc = null;
+}
 
 // Simple hash function for input data
 function hashInput(data: Uint8Array): string {
@@ -634,6 +814,7 @@ async function handleInit(msg: WorkerMessage) {
     });
 
     module = self.Module as EmscriptenModule;
+    moduleGeneration += 1;
     emitPhaseProgress('filesystem', 'Setting up filesystem...');
 
     // Set SAL_LOG environment variable for LibreOffice logging
@@ -682,6 +863,7 @@ async function handleInit(msg: WorkerMessage) {
       filename: f.filename,
       data: f.data instanceof ArrayBuffer ? new Uint8Array(f.data) : f.data,
     }));
+    dynamicFontProfileStateKnown = !fonts || fonts.length === 0;
 
     // Initialize LibreOfficeConverter with the pre-loaded module
     // Fonts are injected into the virtual FS before LOK init (fontconfig scans at startup)
@@ -2414,6 +2596,296 @@ async function handleCloseDocument(msg: WorkerMessage) {
   }
 }
 
+async function handleSetFontProfile(msg: WorkerMessage) {
+  const profile = msg.profile;
+  if (!profile) {
+    postResponse({ type: 'error', id: msg.id, error: 'Missing font profile' });
+    return;
+  }
+
+  const fail = (overrides: Partial<FontProfileResult>) => {
+    postResponse({
+      type: 'fontProfileResult',
+      id: msg.id,
+      fontProfileResult: fontProfileResult(profile, overrides),
+    });
+  };
+
+  if (
+    profile.schemaVersion !== FONT_PROFILE_SCHEMA_VERSION
+    || !profile.transitionId
+    || !profile.expectedActiveFingerprint
+    || !profile.targetFingerprint
+    || !Array.isArray(profile.fonts)
+  ) {
+    fail({
+      code: 'INVALID_PROFILE',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], ['Invalid font profile envelope']),
+    });
+    return;
+  }
+
+  if (!dynamicFontProfileStateKnown) {
+    fail({
+      code: 'UNSUPPORTED',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], [
+        'Dynamic font profiles require initialization without legacy static fonts',
+      ]),
+    });
+    return;
+  }
+
+  if (!lokBindings?.supportsFontProfile()) {
+    fail({
+      code: 'UNSUPPORTED',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], ['Native lok_setFontProfile export is unavailable']),
+    });
+    return;
+  }
+
+  if (profile.expectedActiveFingerprint.toLowerCase() !== activeFontFingerprint) {
+    fail({
+      code: 'STALE_ACTIVE_FINGERPRINT',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], ['Active profile compare-and-swap failed']),
+    });
+    return;
+  }
+
+  if (editorSessions.size > 0) {
+    fail({
+      code: 'FONT_PROFILE_BUSY',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], ['An editor session is active']),
+    });
+    return;
+  }
+
+  const targetEntries: ActiveFontRecord[] = [];
+  const targetRecords = new Map<string, ActiveFontRecord>();
+  const fontBytes = new Map<string, Uint8Array>();
+  try {
+    if (profile.fonts.length > FONT_PROFILE_MAX_FONTS) {
+      throw new Error(`Font profile exceeds ${FONT_PROFILE_MAX_FONTS} fonts`);
+    }
+    let totalFontBytes = 0;
+    const filenamesBySha256 = new Map<string, string>();
+    const entryKeys = new Set<string>();
+    for (const font of profile.fonts) {
+      if (!font.filename || font.filename.includes('/') || font.filename.includes('\\')) {
+        throw new Error(`Invalid logical font filename: ${font.filename}`);
+      }
+      const data = font.data instanceof Uint8Array ? font.data : new Uint8Array(font.data);
+      if (data.byteLength === 0) {
+        throw new Error(`Font file is empty: ${font.filename}`);
+      }
+      assertSfntHeader(font.filename, data);
+      totalFontBytes += data.byteLength;
+      if (totalFontBytes > FONT_PROFILE_MAX_BYTES) {
+        throw new Error(`Font profile exceeds ${FONT_PROFILE_MAX_BYTES} bytes`);
+      }
+      const sha256 = await sha256Hex(data);
+      if (font.sha256 !== undefined && font.sha256.toLowerCase() !== sha256) {
+        throw new Error(`SHA-256 mismatch for ${font.filename}`);
+      }
+      const existingFilename = filenamesBySha256.get(sha256);
+      if (existingFilename && existingFilename !== font.filename) {
+        throw new Error(
+          `Duplicate font content must use one logical filename: ${existingFilename}, ${font.filename}`
+        );
+      }
+      filenamesBySha256.set(sha256, font.filename);
+      const path = `${FONT_PROFILE_ROOT}/${sha256}.${fontProfileExtension(font.filename)}`;
+      const entry = {
+        sha256,
+        filename: font.filename,
+        path,
+        url: `file://${path}`,
+        byteLength: data.byteLength,
+      };
+      const key = `${font.filename}\u0000${sha256}`;
+      if (entryKeys.has(key)) {
+        throw new Error(`Duplicate font profile entry: ${font.filename}`);
+      }
+      entryKeys.add(key);
+      targetRecords.set(key, entry);
+      targetEntries.push(entry);
+      fontBytes.set(sha256, data);
+    }
+
+    const authoritativeTarget = await calculateProfileFingerprint(targetEntries);
+    if (authoritativeTarget !== profile.targetFingerprint.toLowerCase()) {
+      throw new Error('Target fingerprint does not match the complete Worker-computed manifest');
+    }
+  } catch (error) {
+    fail({
+      code: 'INVALID_PROFILE',
+      diagnostics: createFontProfileDiagnostics(0, 0, [], [
+        error instanceof Error ? error.message : String(error),
+      ]),
+    });
+    return;
+  }
+
+  if (profile.targetFingerprint.toLowerCase() === activeFontFingerprint) {
+    fail({
+      ok: true,
+      code: 'OK',
+      appliedFingerprint: activeFontFingerprint,
+      mutation: { attempted: false, committed: true, stage: 'commit' },
+    });
+    return;
+  }
+
+  try {
+    closeCachedDocumentStrict();
+  } catch (error) {
+    fail({
+      code: 'CACHE_CLOSE_FAILED',
+      runtimeReusable: false,
+      quarantine: true,
+      diagnostics: createFontProfileDiagnostics(0, 0, [], [
+        error instanceof Error ? error.message : String(error),
+      ]),
+    });
+    return;
+  }
+
+  const added = targetEntries.filter((entry) => !activeFonts.has(`${entry.filename}\u0000${entry.sha256}`));
+  const removed = [...activeFonts.entries()]
+    .filter(([key]) => !targetRecords.has(key))
+    .map(([, entry]) => entry);
+  const stagedPaths: string[] = [];
+
+  try {
+    ensureDirectory(FONT_PROFILE_ROOT);
+    for (const entry of added) {
+      const bytes = fontBytes.get(entry.sha256);
+      if (!bytes) throw new Error(`Missing bytes for ${entry.filename}`);
+      if (await verifyImmutablePath(entry.path, bytes, entry.sha256)) {
+        stagedPaths.push(entry.path);
+      }
+    }
+  } catch (error) {
+    const cleanupDebtPaths = cleanupStagedPaths(stagedPaths);
+    fail({
+      code: 'INVALID_PROFILE',
+      mutation: { attempted: false, committed: false, stage: 'stage' },
+      diagnostics: createFontProfileDiagnostics(stagedPaths.length, removed.length, cleanupDebtPaths, [
+        error instanceof Error ? error.message : String(error),
+      ]),
+    });
+    return;
+  }
+
+  try {
+    const nativeResult = lokBindings.setFontProfile({
+      schemaVersion: FONT_PROFILE_SCHEMA_VERSION,
+      transitionId: profile.transitionId,
+      expectedActiveFingerprint: activeFontFingerprint,
+      targetFingerprint: profile.targetFingerprint.toLowerCase(),
+      targetManifest: targetEntries,
+      added,
+      removed,
+    });
+    if (!nativeResult) {
+      const cleanupDebtPaths = cleanupStagedPaths(stagedPaths);
+      fail({
+        code: 'UNSUPPORTED',
+        diagnostics: createFontProfileDiagnostics(
+          stagedPaths.length,
+          removed.length,
+          cleanupDebtPaths,
+          ['Native lok_setFontProfile export became unavailable']
+        ),
+      });
+      return;
+    }
+
+    const reportedRuntimeReusable = nativeResult.runtimeReusable ?? nativeResult.ok;
+    const stateKnown = nativeResult.stateKnown ?? reportedRuntimeReusable;
+    const runtimeReusable = stateKnown && reportedRuntimeReusable;
+    const appliedFingerprint = nativeResult.appliedFingerprint ?? activeFontFingerprint;
+    const nativeDiagnostics = nativeResult.diagnostics;
+    if (
+      !nativeResult.ok
+      || !runtimeReusable
+      || appliedFingerprint !== profile.targetFingerprint.toLowerCase()
+    ) {
+      const rollbackAttempted = nativeResult.rollback?.attempted ?? false;
+      const rollbackSucceeded = nativeResult.rollback?.succeeded ?? null;
+      const cleanupDebtPaths = runtimeReusable && rollbackSucceeded !== false
+        ? cleanupStagedPaths(stagedPaths)
+        : stagedPaths;
+      fail({
+        code: 'NATIVE_ERROR',
+        appliedFingerprint,
+        addedCount: nativeResult.addedCount ?? 0,
+        removedCount: nativeResult.removedCount ?? 0,
+        mutation: {
+          attempted: nativeResult.mutation?.attempted ?? true,
+          committed: false,
+          stage: nativeResult.stage ?? nativeResult.mutation?.stage ?? 'rollback',
+        },
+        rollback: { attempted: rollbackAttempted, succeeded: rollbackSucceeded },
+        stateKnown,
+        runtimeReusable,
+        quarantine: !runtimeReusable,
+        diagnostics: createFontProfileDiagnostics(
+          stagedPaths.length,
+          removed.length,
+          cleanupDebtPaths,
+          [nativeResult.code ?? 'Native font profile transaction failed'],
+          nativeDiagnostics
+        ),
+      });
+      return;
+    }
+
+    activeFonts = targetRecords;
+    activeFontFingerprint = appliedFingerprint;
+    const retainedPaths = new Set(targetEntries.map((entry) => entry.path));
+    const cleanupDebtPaths = cleanupStagedPaths(
+      removed.map((entry) => entry.path).filter((path) => !retainedPaths.has(path))
+    );
+
+    postResponse({
+      type: 'fontProfileResult',
+      id: msg.id,
+      fontProfileResult: fontProfileResult(profile, {
+        ok: true,
+        code: 'OK',
+        activeFingerprint: activeFontFingerprint,
+        appliedFingerprint: activeFontFingerprint,
+        addedCount: nativeResult.addedCount ?? added.length,
+        removedCount: nativeResult.removedCount ?? removed.length,
+        mutation: { attempted: true, committed: true, stage: 'commit' },
+        rollback: { attempted: false, succeeded: null },
+        stateKnown: true,
+        runtimeReusable: true,
+        quarantine: false,
+        diagnostics: createFontProfileDiagnostics(
+          stagedPaths.length,
+          removed.length,
+          cleanupDebtPaths,
+          cleanupDebtPaths.length > 0 ? ['Profile committed with MEMFS cleanup debt'] : [],
+          nativeDiagnostics
+        ),
+      }),
+    });
+  } catch (error) {
+    fail({
+      code: 'NATIVE_ERROR',
+      mutation: { attempted: true, committed: false, stage: 'rollback' },
+      rollback: { attempted: true, succeeded: false },
+      stateKnown: false,
+      runtimeReusable: false,
+      quarantine: true,
+      diagnostics: createFontProfileDiagnostics(stagedPaths.length, removed.length, stagedPaths, [
+        error instanceof Error ? error.message : String(error),
+      ]),
+    });
+  }
+}
+
 function handleDestroy(msg: WorkerMessage) {
   console.log('handleDestroy');
 
@@ -2446,16 +2918,16 @@ function handleDestroy(msg: WorkerMessage) {
 
   module = null;
   initialized = false;
+  activeFonts = new Map();
+  activeFontFingerprint = EMPTY_FONT_PROFILE_FINGERPRINT;
+  dynamicFontProfileStateKnown = true;
   postResponse({ type: 'ready', id: msg.id });
 
   // Close this worker after a short delay to ensure response is sent
   setTimeout(() => self.close(), 100);
 }
 
-// Message handler
-self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-  const msg = event.data;
-
+async function dispatchMessage(msg: WorkerMessage): Promise<void> {
   switch (msg.type) {
     case 'init':
       await handleInit(msg);
@@ -2502,10 +2974,27 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
     case 'closeDocument':
       await handleCloseDocument(msg);
       break;
+    case 'setFontProfile':
+      await handleSetFontProfile(msg);
+      break;
     case 'destroy':
       handleDestroy(msg);
       break;
   }
+}
+
+// Every operation that may touch LibreOfficeKit or its MEMFS is serialized here.
+self.onmessage = (event: MessageEvent<WorkerMessage>) => {
+  const msg = event.data;
+  const operation = nativeOperationTail.then(() => dispatchMessage(msg));
+  nativeOperationTail = operation.catch((error) => {
+    postResponse({
+      type: 'error',
+      id: msg.id,
+      error: error instanceof Error ? error.message : String(error),
+      quarantine: true,
+    });
+  });
 };
 
 // Signal worker is loaded

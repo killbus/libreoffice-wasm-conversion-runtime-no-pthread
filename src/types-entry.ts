@@ -26,6 +26,20 @@ export type {
   PdfOptions,
   ImageOptions,
   ProgressInfo,
+  FontData,
+  FontProfileDiagnostics,
+  FontProfileFont,
+  FontProfileMutationDisposition,
+  FontProfileRequest,
+  FontProfileResult,
+  FontProfileResultCode,
+  FontProfileRollbackDisposition,
+  FontProfileRuntimeIdentity,
+  FontProfileStage,
+  IFontProfileConverter,
+  NativeFontProfileManifestEntry,
+  NativeFontProfileRequest,
+  NativeFontProfileResult,
   WasmLoadPhase,
   WasmLoadProgress,
   DocumentCategory,
@@ -57,6 +71,8 @@ export type {
 export {
   ConversionError,
   ConversionErrorCode,
+  EMPTY_FONT_PROFILE_FINGERPRINT,
+  FONT_PROFILE_SCHEMA_VERSION,
 } from './types.js';
 
 // ============================================

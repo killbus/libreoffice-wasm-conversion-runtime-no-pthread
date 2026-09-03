@@ -45,6 +45,9 @@ export function deriveCandidateIdentity(input) {
     },
     runtime: {
       threading: input.runtime.threading,
+      ...(input.runtime.capabilities
+        ? { capabilities: input.runtime.capabilities }
+        : {}),
     },
     assets: input.assets
       .map(({ path, role, mimeType, bytes, sha256 }) => ({

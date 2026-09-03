@@ -13,7 +13,11 @@
  *   - lok_destroy(pKit)          <-- RECOMMENDED to add
  */
 
-import type { EmscriptenModule } from './types.js';
+import type {
+  EmscriptenModule,
+  NativeFontProfileRequest,
+  NativeFontProfileResult,
+} from './types.js';
 import {
   NativeConversionError,
   decodeNativeConversionResult,
@@ -260,6 +264,18 @@ export class LOKBindings {
     if (this.verbose) {
       console.log('[LOK]', ...args);
     }
+  }
+
+  supportsFontProfile(): boolean {
+    return typeof this.module._lok_setFontProfile === 'function'
+      && typeof this.module._lok_setFontProfileFree === 'function'
+      && typeof this.module._lok_documentLoad === 'function'
+      && typeof this.module._lok_documentLoadWithOptions === 'function'
+      && typeof this.module._lok_documentDestroy === 'function';
+  }
+
+  getIdentity(): string {
+    return `lok:${this.lokPtr}`;
   }
 
   /**
@@ -595,6 +611,42 @@ export class LOKBindings {
       throw nativeAbiFailure('Native conversion bridge produced no decoded result');
     }
     return result;
+  }
+
+  setFontProfile(request: NativeFontProfileRequest): NativeFontProfileResult | null {
+    const nativeSetFontProfile = this.module._lok_setFontProfile;
+    const nativeFree = this.module._lok_setFontProfileFree;
+    if (typeof nativeSetFontProfile !== 'function' || typeof nativeFree !== 'function') return null;
+    if (this.lokPtr === 0) {
+      throw new Error('LOK is not initialized for font profile mutation');
+    }
+
+    let requestPtr = 0;
+    let resultPtr = 0;
+    try {
+      requestPtr = this.allocString(JSON.stringify(request));
+      resultPtr = nativeSetFontProfile(this.lokPtr, requestPtr);
+      if (resultPtr === 0) {
+        throw new Error('Native font profile bridge returned no result');
+      }
+
+      const encodedResult = this.readString(resultPtr);
+      if (encodedResult === null) {
+        throw new Error('Native font profile result pointer was null');
+      }
+      const decoded = JSON.parse(encodedResult) as unknown;
+      if (!decoded || typeof decoded !== 'object' || typeof (decoded as { ok?: unknown }).ok !== 'boolean') {
+        throw new Error('Native font profile bridge returned an invalid result contract');
+      }
+      return decoded as NativeFontProfileResult;
+    } finally {
+      if (resultPtr !== 0) {
+        nativeFree(resultPtr);
+      }
+      if (requestPtr !== 0) {
+        this.module._free(requestPtr);
+      }
+    }
   }
 
   /**

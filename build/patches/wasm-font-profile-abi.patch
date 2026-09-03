@@ -1,0 +1,895 @@
+# Adds a private, versioned font-profile transaction ABI for the no-pthread WASM runtime.
+# The API is intentionally profile-scoped; raw public removefont(path) remains unsupported.
+diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
+index 984233cd62b0ca74f46fff6ba740a99af0197184..c39064cd6c49fde3b032e8d5133c2b6214fa2363 100644
+--- a/desktop/source/lib/init.cxx
++++ b/desktop/source/lib/init.cxx
+@@ -51,12 +51,17 @@
+ #endif
+ 
+ #include <algorithm>
++#include <cctype>
+ #include <cstring>
+ #include <cstdlib>
+ #include <memory>
+ #include <iostream>
++#include <map>
++#include <set>
+ #include <sstream>
++#include <stdexcept>
+ #include <string_view>
++#include <vector>
+ 
+ #include <boost/property_tree/json_parser.hpp>
+ #include <boost/algorithm/string.hpp>
+@@ -3567,6 +3572,783 @@ int nativeConvertDocumentImpl(LibreOfficeKit* pKit, const char* pRequestJSON,
+     return nativeConversionWriteResult(aResult, ppResultJSON);
+ }
+ 
++constexpr sal_Int32 NATIVE_FONT_PROFILE_SCHEMA_VERSION = 1;
++constexpr std::string_view NATIVE_EMPTY_FONT_PROFILE_FINGERPRINT
++    = "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
++constexpr std::string_view NATIVE_FONT_PROFILE_ROOT = "/tmp/font-profiles/sha256/";
++constexpr std::size_t NATIVE_FONT_PROFILE_MAX_REQUEST_BYTES = 1024 * 1024;
++constexpr std::size_t NATIVE_FONT_PROFILE_MAX_FONTS = 128;
++constexpr sal_uInt64 NATIVE_FONT_PROFILE_MAX_BYTES = 512ULL * 1024ULL * 1024ULL;
++
++struct NativeFontProfileEntry
++{
++    std::string maSha256;
++    std::string maFilename;
++    OUString maPath;
++    OUString maURL;
++    sal_uInt64 mnByteLength = 0;
++};
++
++using NativeFontProfileMap = std::map<std::string, NativeFontProfileEntry>;
++
++struct NativeFontProfileRequestData
++{
++    std::string maTransitionId;
++    std::string maExpectedActiveFingerprint;
++    std::string maTargetFingerprint;
++    NativeFontProfileMap maTargetManifest;
++    NativeFontProfileMap maAdded;
++    NativeFontProfileMap maRemoved;
++};
++
++struct NativeFontProfileResultData
++{
++    bool mbOk = false;
++    std::string maCode = "NATIVE_ERROR";
++    std::string maStage = "validate";
++    std::string maAppliedFingerprint = std::string(NATIVE_EMPTY_FONT_PROFILE_FINGERPRINT);
++    sal_Int32 mnAddedCount = 0;
++    sal_Int32 mnRemovedCount = 0;
++    bool mbMutationAttempted = false;
++    bool mbMutationCommitted = false;
++    bool mbRollbackAttempted = false;
++    bool mbRollbackSucceeded = false;
++    bool mbStateKnown = true;
++    bool mbRuntimeReusable = true;
++    OUString maMessage;
++};
++
++struct NativeFontProfileState
++{
++    LibreOfficeKit* mpKit = nullptr;
++    std::string maFingerprint = std::string(NATIVE_EMPTY_FONT_PROFILE_FINGERPRINT);
++    NativeFontProfileMap maEntries;
++};
++
++NativeFontProfileState gNativeFontProfileState;
++std::set<LibreOfficeKitDocument*> gNativeShimDocuments;
++
++OUString nativeFontProfileFromUtf8(const std::string& rValue)
++{
++    return OStringToOUString(OString(rValue.data(), static_cast<sal_Int32>(rValue.size())),
++                             RTL_TEXTENCODING_UTF8);
++}
++
++std::string nativeFontProfileKey(const NativeFontProfileEntry& rEntry)
++{
++    std::string aKey = rEntry.maFilename;
++    aKey.push_back('\0');
++    aKey += rEntry.maSha256;
++    return aKey;
++}
++
++bool nativeFontProfileEntryEqual(const NativeFontProfileEntry& rLeft,
++                                 const NativeFontProfileEntry& rRight)
++{
++    return rLeft.maSha256 == rRight.maSha256 && rLeft.maFilename == rRight.maFilename
++           && rLeft.maPath == rRight.maPath && rLeft.maURL == rRight.maURL
++           && rLeft.mnByteLength == rRight.mnByteLength;
++}
++
++bool nativeFontProfileMapsEqual(const NativeFontProfileMap& rLeft,
++                                const NativeFontProfileMap& rRight)
++{
++    if (rLeft.size() != rRight.size())
++        return false;
++    auto aLeft = rLeft.begin();
++    auto aRight = rRight.begin();
++    while (aLeft != rLeft.end())
++    {
++        if (aLeft->first != aRight->first
++            || !nativeFontProfileEntryEqual(aLeft->second, aRight->second))
++        {
++            return false;
++        }
++        ++aLeft;
++        ++aRight;
++    }
++    return true;
++}
++
++bool nativeFontProfileIsLowerHex(std::string_view aValue, std::size_t nLength)
++{
++    if (aValue.size() != nLength)
++        return false;
++    return std::all_of(aValue.begin(), aValue.end(), [](char c) {
++        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
++    });
++}
++
++bool nativeFontProfileIsFingerprint(std::string_view aValue)
++{
++    return aValue.size() == 71 && aValue.substr(0, 7) == "sha256:"
++           && nativeFontProfileIsLowerHex(aValue.substr(7), 64);
++}
++
++std::string nativeFontProfileExtension(std::string_view aFilename)
++{
++    const std::size_t nDot = aFilename.rfind('.');
++    if (nDot == std::string_view::npos || nDot + 1 == aFilename.size())
++        return {};
++    std::string aExtension(aFilename.substr(nDot + 1));
++    std::transform(aExtension.begin(), aExtension.end(), aExtension.begin(),
++                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
++    if (aExtension != "otf" && aExtension != "ttc" && aExtension != "tte"
++        && aExtension != "ttf")
++    {
++        return {};
++    }
++    return aExtension;
++}
++
++void nativeFontProfileSkipWhitespace(std::string_view aJSON, std::size_t& rPosition)
++{
++    while (rPosition < aJSON.size())
++    {
++        const char c = aJSON[rPosition];
++        if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
++            break;
++        ++rPosition;
++    }
++}
++
++bool nativeFontProfileSkipJSONString(std::string_view aJSON, std::size_t& rPosition,
++                                     std::string* pValue = nullptr)
++{
++    if (rPosition >= aJSON.size() || aJSON[rPosition] != '"')
++        return false;
++    ++rPosition;
++    while (rPosition < aJSON.size())
++    {
++        const unsigned char c = static_cast<unsigned char>(aJSON[rPosition++]);
++        if (c == '"')
++            return true;
++        if (c < 0x20)
++            return false;
++        if (c != '\\')
++        {
++            if (pValue)
++                pValue->push_back(static_cast<char>(c));
++            continue;
++        }
++        if (rPosition >= aJSON.size())
++            return false;
++        const char cEscape = aJSON[rPosition++];
++        if (cEscape == 'u')
++        {
++            for (int nDigit = 0; nDigit < 4; ++nDigit)
++            {
++                if (rPosition >= aJSON.size()
++                    || !std::isxdigit(static_cast<unsigned char>(aJSON[rPosition++])))
++                {
++                    return false;
++                }
++            }
++        }
++        else if (std::string_view("\"\\/bfnrt").find(cEscape) == std::string_view::npos)
++        {
++            return false;
++        }
++        if (pValue)
++            return false;
++    }
++    return false;
++}
++
++bool nativeFontProfileSkipJSONValue(std::string_view aJSON, std::size_t& rPosition)
++{
++    nativeFontProfileSkipWhitespace(aJSON, rPosition);
++    if (rPosition >= aJSON.size())
++        return false;
++    if (aJSON[rPosition] == '"')
++        return nativeFontProfileSkipJSONString(aJSON, rPosition);
++    if (aJSON[rPosition] == '{' || aJSON[rPosition] == '[')
++    {
++        std::vector<char> aClosers;
++        aClosers.push_back(aJSON[rPosition++] == '{' ? '}' : ']');
++        while (rPosition < aJSON.size() && !aClosers.empty())
++        {
++            const char c = aJSON[rPosition];
++            if (c == '"')
++            {
++                if (!nativeFontProfileSkipJSONString(aJSON, rPosition))
++                    return false;
++                continue;
++            }
++            ++rPosition;
++            if (c == '{')
++                aClosers.push_back('}');
++            else if (c == '[')
++                aClosers.push_back(']');
++            else if (c == aClosers.back())
++                aClosers.pop_back();
++            else if (c == '}' || c == ']')
++                return false;
++        }
++        return aClosers.empty();
++    }
++
++    const std::size_t nStart = rPosition;
++    while (rPosition < aJSON.size() && aJSON[rPosition] != ',' && aJSON[rPosition] != '}')
++        ++rPosition;
++    while (rPosition > nStart
++           && (aJSON[rPosition - 1] == ' ' || aJSON[rPosition - 1] == '\t'
++               || aJSON[rPosition - 1] == '\r' || aJSON[rPosition - 1] == '\n'))
++    {
++        --rPosition;
++    }
++    return rPosition > nStart;
++}
++
++bool nativeFontProfileValidateRootTypes(std::string_view aJSON, OUString& rError)
++{
++    std::size_t nPosition = 0;
++    nativeFontProfileSkipWhitespace(aJSON, nPosition);
++    if (nPosition >= aJSON.size() || aJSON[nPosition++] != '{')
++    {
++        rError = u"requestJson must be a JSON object"_ustr;
++        return false;
++    }
++    nativeFontProfileSkipWhitespace(aJSON, nPosition);
++    if (nPosition < aJSON.size() && aJSON[nPosition] == '}')
++    {
++        rError = u"Font profile request is incomplete"_ustr;
++        return false;
++    }
++
++    while (nPosition < aJSON.size())
++    {
++        std::string aName;
++        if (!nativeFontProfileSkipJSONString(aJSON, nPosition, &aName))
++        {
++            rError = u"Font profile field name is invalid"_ustr;
++            return false;
++        }
++        nativeFontProfileSkipWhitespace(aJSON, nPosition);
++        if (nPosition >= aJSON.size() || aJSON[nPosition++] != ':')
++        {
++            rError = u"Expected ':' after font profile field name"_ustr;
++            return false;
++        }
++        nativeFontProfileSkipWhitespace(aJSON, nPosition);
++        if (nPosition >= aJSON.size())
++        {
++            rError = u"Font profile field value is missing"_ustr;
++            return false;
++        }
++
++        const char cValue = aJSON[nPosition];
++        if ((aName == "targetManifest" || aName == "added" || aName == "removed")
++            && cValue != '[')
++        {
++            rError = u"Font profile manifests must be JSON arrays"_ustr;
++            return false;
++        }
++        if ((aName == "transitionId" || aName == "expectedActiveFingerprint"
++             || aName == "targetFingerprint")
++            && cValue != '"')
++        {
++            rError = u"Font profile identifiers must be JSON strings"_ustr;
++            return false;
++        }
++        if (aName == "schemaVersion" && (cValue < '0' || cValue > '9'))
++        {
++            rError = u"Font profile schemaVersion must be a JSON number"_ustr;
++            return false;
++        }
++        if (!nativeFontProfileSkipJSONValue(aJSON, nPosition))
++        {
++            rError = u"Font profile field value is invalid"_ustr;
++            return false;
++        }
++
++        nativeFontProfileSkipWhitespace(aJSON, nPosition);
++        if (nPosition < aJSON.size() && aJSON[nPosition] == '}')
++        {
++            ++nPosition;
++            nativeFontProfileSkipWhitespace(aJSON, nPosition);
++            if (nPosition != aJSON.size())
++            {
++                rError = u"Unexpected data after font profile request"_ustr;
++                return false;
++            }
++            return true;
++        }
++        if (nPosition >= aJSON.size() || aJSON[nPosition++] != ',')
++        {
++            rError = u"Expected ',' or '}' after font profile field"_ustr;
++            return false;
++        }
++        nativeFontProfileSkipWhitespace(aJSON, nPosition);
++    }
++
++    rError = u"Font profile request is incomplete"_ustr;
++    return false;
++}
++
++bool nativeFontProfileReadScalar(const boost::property_tree::ptree& rTree,
++                                 const char* pName, std::string& rValue, OUString& rError)
++{
++    auto aChild = rTree.get_child_optional(pName);
++    if (!aChild || !aChild->empty())
++    {
++        rError = u"Missing or invalid scalar field: "_ustr + OUString::fromUtf8(pName);
++        return false;
++    }
++    rValue = aChild->data();
++    return true;
++}
++
++bool nativeFontProfileParseEntry(const boost::property_tree::ptree& rTree,
++                                 NativeFontProfileEntry& rEntry, OUString& rError)
++{
++    unsigned nSeen = 0;
++    for (const auto& rField : rTree)
++    {
++        unsigned nBit = 0;
++        if (rField.first == "sha256") nBit = 1U << 0;
++        else if (rField.first == "filename") nBit = 1U << 1;
++        else if (rField.first == "path") nBit = 1U << 2;
++        else if (rField.first == "url") nBit = 1U << 3;
++        else if (rField.first == "byteLength") nBit = 1U << 4;
++        else
++        {
++            rError = u"Unknown font manifest field"_ustr;
++            return false;
++        }
++        if ((nSeen & nBit) != 0)
++        {
++            rError = u"Duplicate font manifest field"_ustr;
++            return false;
++        }
++        nSeen |= nBit;
++    }
++    if (nSeen != 0x1f)
++    {
++        rError = u"Font manifest entry is incomplete"_ustr;
++        return false;
++    }
++
++    std::string aPath;
++    std::string aURL;
++    if (!nativeFontProfileReadScalar(rTree, "sha256", rEntry.maSha256, rError)
++        || !nativeFontProfileReadScalar(rTree, "filename", rEntry.maFilename, rError)
++        || !nativeFontProfileReadScalar(rTree, "path", aPath, rError)
++        || !nativeFontProfileReadScalar(rTree, "url", aURL, rError))
++    {
++        return false;
++    }
++
++    auto aByteLength = rTree.get_optional<sal_uInt64>("byteLength");
++    if (!aByteLength || *aByteLength == 0)
++    {
++        rError = u"Font byteLength must be positive"_ustr;
++        return false;
++    }
++    rEntry.mnByteLength = *aByteLength;
++
++    if (!nativeFontProfileIsLowerHex(rEntry.maSha256, 64))
++    {
++        rError = u"Font sha256 must be 64 lowercase hexadecimal characters"_ustr;
++        return false;
++    }
++    if (rEntry.maFilename.empty() || rEntry.maFilename.size() > 255
++        || rEntry.maFilename.find('/') != std::string::npos
++        || rEntry.maFilename.find('\\') != std::string::npos)
++    {
++        rError = u"Font filename is invalid"_ustr;
++        return false;
++    }
++
++    const std::string aExtension = nativeFontProfileExtension(rEntry.maFilename);
++    if (aExtension.empty())
++    {
++        rError = u"Font filename must use a supported SFNT extension"_ustr;
++        return false;
++    }
++    const std::string aExpectedPath
++        = std::string(NATIVE_FONT_PROFILE_ROOT) + rEntry.maSha256 + "." + aExtension;
++    if (aPath != aExpectedPath || aURL != "file://" + aExpectedPath)
++    {
++        rError = u"Font path is not the expected content-addressed MEMFS path"_ustr;
++        return false;
++    }
++    rEntry.maPath = nativeFontProfileFromUtf8(aPath);
++    rEntry.maURL = nativeFontProfileFromUtf8(aURL);
++    return true;
++}
++
++bool nativeFontProfileParseManifest(const boost::property_tree::ptree& rRoot,
++                                    const char* pName, NativeFontProfileMap& rManifest,
++                                    OUString& rError)
++{
++    auto aArray = rRoot.get_child_optional(pName);
++    if (!aArray)
++    {
++        rError = u"Missing font array: "_ustr + OUString::fromUtf8(pName);
++        return false;
++    }
++    if (!aArray->data().empty() || aArray->size() > NATIVE_FONT_PROFILE_MAX_FONTS)
++    {
++        rError = u"Invalid or oversized font array: "_ustr + OUString::fromUtf8(pName);
++        return false;
++    }
++
++    std::set<OUString> aPaths;
++    sal_uInt64 nTotalBytes = 0;
++    for (const auto& rItem : *aArray)
++    {
++        if (!rItem.first.empty())
++        {
++            rError = u"Font field is not an array: "_ustr + OUString::fromUtf8(pName);
++            return false;
++        }
++        NativeFontProfileEntry aEntry;
++        if (!nativeFontProfileParseEntry(rItem.second, aEntry, rError))
++            return false;
++        if (aEntry.mnByteLength > NATIVE_FONT_PROFILE_MAX_BYTES
++            || nTotalBytes > NATIVE_FONT_PROFILE_MAX_BYTES - aEntry.mnByteLength)
++        {
++            rError = u"Font profile exceeds the native byte limit"_ustr;
++            return false;
++        }
++        nTotalBytes += aEntry.mnByteLength;
++        if (!aPaths.insert(aEntry.maPath).second)
++        {
++            rError = u"Font profile contains duplicate content paths"_ustr;
++            return false;
++        }
++        const std::string aKey = nativeFontProfileKey(aEntry);
++        if (!rManifest.emplace(aKey, std::move(aEntry)).second)
++        {
++            rError = u"Font profile contains duplicate entries"_ustr;
++            return false;
++        }
++    }
++    return true;
++}
++
++bool nativeFontProfileParseRequest(const char* pRequestJSON,
++                                   NativeFontProfileRequestData& rRequest, OUString& rError)
++{
++    if (!pRequestJSON)
++    {
++        rError = u"requestJson must be provided"_ustr;
++        return false;
++    }
++    const std::size_t nLength = strnlen(pRequestJSON, NATIVE_FONT_PROFILE_MAX_REQUEST_BYTES + 1);
++    if (nLength == 0 || nLength > NATIVE_FONT_PROFILE_MAX_REQUEST_BYTES)
++    {
++        rError = u"requestJson is empty or exceeds the native size limit"_ustr;
++        return false;
++    }
++
++    try
++    {
++        if (!nativeFontProfileValidateRootTypes(std::string_view(pRequestJSON, nLength), rError))
++            return false;
++        std::istringstream aStream(std::string(pRequestJSON, nLength));
++        boost::property_tree::ptree aRoot;
++        boost::property_tree::read_json(aStream, aRoot);
++
++        unsigned nSeen = 0;
++        for (const auto& rField : aRoot)
++        {
++            unsigned nBit = 0;
++            if (rField.first == "schemaVersion") nBit = 1U << 0;
++            else if (rField.first == "transitionId") nBit = 1U << 1;
++            else if (rField.first == "expectedActiveFingerprint") nBit = 1U << 2;
++            else if (rField.first == "targetFingerprint") nBit = 1U << 3;
++            else if (rField.first == "targetManifest") nBit = 1U << 4;
++            else if (rField.first == "added") nBit = 1U << 5;
++            else if (rField.first == "removed") nBit = 1U << 6;
++            else
++            {
++                rError = u"Unknown font profile request field"_ustr;
++                return false;
++            }
++            if ((nSeen & nBit) != 0)
++            {
++                rError = u"Duplicate font profile request field"_ustr;
++                return false;
++            }
++            nSeen |= nBit;
++        }
++        if (nSeen != 0x7f)
++        {
++            rError = u"Font profile request is incomplete"_ustr;
++            return false;
++        }
++
++        auto aSchemaVersion = aRoot.get_optional<sal_Int32>("schemaVersion");
++        if (!aSchemaVersion || *aSchemaVersion != NATIVE_FONT_PROFILE_SCHEMA_VERSION)
++        {
++            rError = u"Unsupported font profile schema version"_ustr;
++            return false;
++        }
++        if (!nativeFontProfileReadScalar(aRoot, "transitionId", rRequest.maTransitionId, rError)
++            || !nativeFontProfileReadScalar(aRoot, "expectedActiveFingerprint",
++                                            rRequest.maExpectedActiveFingerprint, rError)
++            || !nativeFontProfileReadScalar(aRoot, "targetFingerprint",
++                                            rRequest.maTargetFingerprint, rError))
++        {
++            return false;
++        }
++        if (rRequest.maTransitionId.empty() || rRequest.maTransitionId.size() > 256
++            || !nativeFontProfileIsFingerprint(rRequest.maExpectedActiveFingerprint)
++            || !nativeFontProfileIsFingerprint(rRequest.maTargetFingerprint))
++        {
++            rError = u"Font profile identifiers are invalid"_ustr;
++            return false;
++        }
++        return nativeFontProfileParseManifest(aRoot, "targetManifest", rRequest.maTargetManifest,
++                                              rError)
++               && nativeFontProfileParseManifest(aRoot, "added", rRequest.maAdded, rError)
++               && nativeFontProfileParseManifest(aRoot, "removed", rRequest.maRemoved, rError);
++    }
++    catch (const std::exception&)
++    {
++        rError = u"requestJson is not valid JSON"_ustr;
++        return false;
++    }
++    catch (...)
++    {
++        rError = u"requestJson could not be decoded"_ustr;
++        return false;
++    }
++}
++
++NativeFontProfileMap nativeFontProfileDifference(const NativeFontProfileMap& rLeft,
++                                                 const NativeFontProfileMap& rRight)
++{
++    NativeFontProfileMap aDifference;
++    for (const auto& [rKey, rEntry] : rLeft)
++    {
++        if (rRight.find(rKey) == rRight.end())
++            aDifference.emplace(rKey, rEntry);
++    }
++    return aDifference;
++}
++
++bool nativeFontProfileValidateRequest(const NativeFontProfileRequestData& rRequest,
++                                      OUString& rError)
++{
++    if (rRequest.maExpectedActiveFingerprint != gNativeFontProfileState.maFingerprint)
++    {
++        rError = u"Active font profile fingerprint does not match"_ustr;
++        return false;
++    }
++
++    for (const auto& [rKey, rEntry] : rRequest.maTargetManifest)
++    {
++        auto aCurrent = gNativeFontProfileState.maEntries.find(rKey);
++        if (aCurrent != gNativeFontProfileState.maEntries.end()
++            && !nativeFontProfileEntryEqual(aCurrent->second, rEntry))
++        {
++            rError = u"Target manifest conflicts with the active font record"_ustr;
++            return false;
++        }
++    }
++
++    if (!nativeFontProfileMapsEqual(
++            nativeFontProfileDifference(rRequest.maTargetManifest,
++                                        gNativeFontProfileState.maEntries),
++            rRequest.maAdded)
++        || !nativeFontProfileMapsEqual(
++            nativeFontProfileDifference(gNativeFontProfileState.maEntries,
++                                        rRequest.maTargetManifest),
++            rRequest.maRemoved))
++    {
++        rError = u"Added and removed lists do not match the complete target manifest"_ustr;
++        return false;
++    }
++
++    for (const auto& [rKey, rEntry] : rRequest.maTargetManifest)
++    {
++        (void)rKey;
++        osl::File aFile(rEntry.maURL);
++        if (aFile.open(osl_File_OpenFlag_Read) != osl::File::E_None)
++        {
++            rError = u"A target font file is not readable"_ustr;
++            return false;
++        }
++        sal_uInt64 nSize = 0;
++        const osl::FileBase::RC eSize = aFile.getSize(nSize);
++        aFile.close();
++        if (eSize != osl::File::E_None || nSize != rEntry.mnByteLength)
++        {
++            rError = u"A target font file size does not match its manifest"_ustr;
++            return false;
++        }
++    }
++    return true;
++}
++
++sal_Int64 nativeFontProfileActiveBytes()
++{
++    sal_uInt64 nBytes = 0;
++    for (const auto& [rKey, rEntry] : gNativeFontProfileState.maEntries)
++    {
++        (void)rKey;
++        nBytes += rEntry.mnByteLength;
++    }
++    return static_cast<sal_Int64>(nBytes);
++}
++
++char* nativeFontProfileWriteResult(const NativeFontProfileResultData& rResult)
++{
++    tools::JsonWriter aJSON;
++    aJSON.put("ok", rResult.mbOk);
++    aJSON.put("code", std::string_view(rResult.maCode));
++    aJSON.put("stage", std::string_view(rResult.maStage));
++    aJSON.put("appliedFingerprint", std::string_view(rResult.maAppliedFingerprint));
++    aJSON.put("addedCount", rResult.mnAddedCount);
++    aJSON.put("removedCount", rResult.mnRemovedCount);
++    {
++        auto aMutation = aJSON.startNode("mutation");
++        aJSON.put("attempted", rResult.mbMutationAttempted);
++        aJSON.put("committed", rResult.mbMutationCommitted);
++        aJSON.put("stage", std::string_view(rResult.maStage));
++    }
++    {
++        auto aRollback = aJSON.startNode("rollback");
++        aJSON.put("attempted", rResult.mbRollbackAttempted);
++        aJSON.put("succeeded", rResult.mbRollbackSucceeded);
++    }
++    aJSON.put("stateKnown", rResult.mbStateKnown);
++    aJSON.put("runtimeReusable", rResult.mbRuntimeReusable);
++    {
++        auto aDiagnostics = aJSON.startNode("diagnostics");
++        aJSON.put("activeFontCount",
++                  static_cast<sal_Int32>(gNativeFontProfileState.maEntries.size()));
++        aJSON.put("activeFontBytes", nativeFontProfileActiveBytes());
++        if (!rResult.maMessage.isEmpty())
++            aJSON.put("message", rResult.maMessage);
++    }
++
++    const OString aEncoded = aJSON.finishAndGetAsOString();
++    char* pAllocation = static_cast<char*>(malloc(aEncoded.getLength() + 1));
++    if (!pAllocation)
++        return nullptr;
++    memcpy(pAllocation, aEncoded.getStr(), aEncoded.getLength() + 1);
++    return pAllocation;
++}
++
++char* nativeSetFontProfileImpl(LibreOfficeKit* pKit, const char* pRequestJSON)
++{
++    NativeFontProfileResultData aResult;
++    NativeFontProfileRequestData aRequest;
++    if (!nativeFontProfileParseRequest(pRequestJSON, aRequest, aResult.maMessage))
++    {
++        aResult.maCode = "INVALID_PROFILE";
++        return nativeFontProfileWriteResult(aResult);
++    }
++    if (!pKit || !gImpl || pKit != static_cast<LibreOfficeKit*>(gImpl))
++    {
++        aResult.maMessage = u"LibreOfficeKit instance is not initialized"_ustr;
++        aResult.mbRuntimeReusable = false;
++        return nativeFontProfileWriteResult(aResult);
++    }
++
++    SolarMutexGuard aGuard;
++    if (gNativeFontProfileState.mpKit != pKit)
++    {
++        gNativeFontProfileState = NativeFontProfileState();
++        gNativeFontProfileState.mpKit = pKit;
++    }
++    aResult.maAppliedFingerprint = gNativeFontProfileState.maFingerprint;
++
++    if (!gNativeShimDocuments.empty())
++    {
++        aResult.maCode = "FONT_PROFILE_BUSY";
++        aResult.maMessage = u"A LibreOfficeKit document is still active"_ustr;
++        return nativeFontProfileWriteResult(aResult);
++    }
++
++    if (aRequest.maExpectedActiveFingerprint != gNativeFontProfileState.maFingerprint)
++    {
++        aResult.maCode = "STALE_ACTIVE_FINGERPRINT";
++        aResult.maMessage = u"Active font profile fingerprint does not match"_ustr;
++        return nativeFontProfileWriteResult(aResult);
++    }
++    if (!nativeFontProfileValidateRequest(aRequest, aResult.maMessage))
++    {
++        aResult.maCode = "INVALID_PROFILE";
++        return nativeFontProfileWriteResult(aResult);
++    }
++    if (aRequest.maTargetFingerprint == gNativeFontProfileState.maFingerprint
++        && nativeFontProfileMapsEqual(aRequest.maTargetManifest,
++                                      gNativeFontProfileState.maEntries))
++    {
++        aResult.mbOk = true;
++        aResult.maCode = "OK";
++        aResult.maStage = "commit";
++        aResult.mbMutationCommitted = true;
++        return nativeFontProfileWriteResult(aResult);
++    }
++
++    OutputDevice* pDevice = Application::GetDefaultDevice();
++    if (!pDevice)
++    {
++        aResult.maMessage = u"Default output device is unavailable"_ustr;
++        aResult.mbRuntimeReusable = false;
++        return nativeFontProfileWriteResult(aResult);
++    }
++
++    std::vector<OUString> aRemovedURLs;
++    aRemovedURLs.reserve(aRequest.maRemoved.size());
++    for (const auto& [rKey, rEntry] : aRequest.maRemoved)
++    {
++        (void)rKey;
++        aRemovedURLs.push_back(rEntry.maURL);
++    }
++    std::vector<OUString> aAddedURLs;
++    aAddedURLs.reserve(aRequest.maAdded.size());
++    for (const auto& [rKey, rEntry] : aRequest.maAdded)
++    {
++        (void)rKey;
++        aAddedURLs.push_back(rEntry.maURL);
++    }
++
++    aResult.mbMutationAttempted = true;
++    aResult.maStage = "replace";
++    try
++    {
++        if (!pDevice->ReplaceTempDevFonts(aRemovedURLs, aAddedURLs))
++            throw std::runtime_error("Failed to replace the native font profile");
++
++        aResult.mnAddedCount = static_cast<sal_Int32>(aRequest.maAdded.size());
++        aResult.mnRemovedCount = static_cast<sal_Int32>(aRequest.maRemoved.size());
++        gNativeFontProfileState.maEntries = aRequest.maTargetManifest;
++        gNativeFontProfileState.maFingerprint = aRequest.maTargetFingerprint;
++        aResult.maAppliedFingerprint = gNativeFontProfileState.maFingerprint;
++        aResult.mbOk = true;
++        aResult.maCode = "OK";
++        aResult.maStage = "commit";
++        aResult.mbMutationCommitted = true;
++        return nativeFontProfileWriteResult(aResult);
++    }
++    catch (const std::exception& rException)
++    {
++        aResult.maMessage = OUString::fromUtf8(rException.what());
++    }
++    catch (...)
++    {
++        aResult.maMessage = u"Unknown native font profile mutation failure"_ustr;
++    }
++
++    aResult.mbStateKnown = false;
++    aResult.mbRuntimeReusable = false;
++    aResult.maAppliedFingerprint = gNativeFontProfileState.maFingerprint;
++    return nativeFontProfileWriteResult(aResult);
++}
++
++void nativeFontProfileReset() noexcept
++{
++    gNativeFontProfileState = NativeFontProfileState();
++    gNativeShimDocuments.clear();
++}
++
+ } // anonymous namespace
+ #endif
+ 
+@@ -9377,6 +10159,31 @@ void lok_convertFree(char* pAllocation) noexcept
+ {
+     free(pAllocation);
+ }
++
++SAL_JNI_EXPORT
++char* lok_setFontProfile(LibreOfficeKit* pKit, const char* pRequestJSON)
++{
++    try
++    {
++        return nativeSetFontProfileImpl(pKit, pRequestJSON);
++    }
++    catch (...)
++    {
++        NativeFontProfileResultData aResult;
++        aResult.maStage = "rollback";
++        aResult.mbStateKnown = false;
++        aResult.mbRuntimeReusable = false;
++        aResult.maMessage
++            = u"Native font profile bridge boundary failure; runtime must be terminated"_ustr;
++        return nativeFontProfileWriteResult(aResult);
++    }
++}
++
++SAL_JNI_EXPORT
++void lok_setFontProfileFree(char* pAllocation) noexcept
++{
++    free(pAllocation);
++}
+ #endif
+ 
+ SAL_JNI_EXPORT
+@@ -9409,6 +10216,10 @@ LibreOfficeKitDocument* lok_documentLoad(LibreOfficeKit* pKit, const char* pPath
+     }
+ 
+     LibreOfficeKitDocument* pDoc = pKit->pClass->documentLoad(pKit, pPath);
++#if defined(__EMSCRIPTEN__)
++    if (pDoc)
++        gNativeShimDocuments.insert(pDoc);
++#endif
+     SAL_INFO("lok.shim", "lok_documentLoad done, doc=" << pDoc);
+     fprintf(stderr, "[LOK C++] lok_documentLoad done, doc=%p\n", (void*)pDoc);
+     fflush(stderr);
+@@ -9435,6 +10246,10 @@ LibreOfficeKitDocument* lok_documentLoadWithOptions(LibreOfficeKit* pKit,
+     }
+ 
+     LibreOfficeKitDocument* pDoc = pKit->pClass->documentLoadWithOptions(pKit, pPath, pOptions);
++#if defined(__EMSCRIPTEN__)
++    if (pDoc)
++        gNativeShimDocuments.insert(pDoc);
++#endif
+     SAL_INFO("lok.shim", "lok_documentLoadWithOptions done, doc=" << pDoc);
+     fprintf(stderr, "[LOK C++] lok_documentLoadWithOptions done, doc=%p\n", (void*)pDoc);
+     fflush(stderr);
+@@ -9507,6 +10322,9 @@ void lok_documentDestroy(LibreOfficeKitDocument* pDoc)
+     }
+ 
+     pDoc->pClass->destroy(pDoc);
++#if defined(__EMSCRIPTEN__)
++    gNativeShimDocuments.erase(pDoc);
++#endif
+     SAL_INFO("lok.shim", "lok_documentDestroy done");
+     fprintf(stderr, "[LOK C++] lok_documentDestroy done\n");
+     fflush(stderr);
+@@ -9549,6 +10367,9 @@ void lok_destroy(LibreOfficeKit* pKit)
+         return;
+     }
+ 
++#if defined(__EMSCRIPTEN__)
++    nativeFontProfileReset();
++#endif
+     lo_destroy(pKit);
+     SAL_INFO("lok.shim", "lok_destroy done");
+     fprintf(stderr, "[LOK C++] lok_destroy done\n");
+diff --git a/desktop/Executable_soffice_bin.mk b/desktop/Executable_soffice_bin.mk
+index 489f166949f615f65a6527ad251678a7d7d70bd7..9a22cffe92df183b94213fe11dd01d9a9f71292b 100644
+--- a/desktop/Executable_soffice_bin.mk
++++ b/desktop/Executable_soffice_bin.mk
+@@ -62,7 +62,7 @@ $(call gb_LinkTarget_get_headers_target,$(call gb_Executable_get_linktarget,soff
+ $(call gb_LinkTarget__static_lib_dummy_depend,unoembind)
+ 
+ $(eval $(call gb_Executable_add_ldflags,soffice_bin,\
+-	-s EXPORTED_FUNCTIONS=["_main"$(COMMA)"_libreofficekit_hook"$(COMMA)"_libreofficekit_hook_2"$(COMMA)"_lok_preinit"$(COMMA)"_lok_preinit_2"$(COMMA)"_lok_convertDocument"$(COMMA)"_lok_convertFree"$(COMMA)"_lok_documentLoad"$(COMMA)"_lok_documentLoadWithOptions"$(COMMA)"_lok_documentSaveAs"$(COMMA)"_lok_documentDestroy"$(COMMA)"_lok_destroy"$(COMMA)"_lok_getError"$(COMMA)"_lok_abortOperation"$(COMMA)"_lok_setOperationTimeout"$(COMMA)"_lok_getOperationState"$(COMMA)"_lok_resetAbort"$(COMMA)"_malloc"$(COMMA)"_free"] -Wl$(COMMA)--whole-archive $(call gb_StaticLibrary_get_target,unoembind) -Wl$(COMMA)--no-whole-archive \
++	-s EXPORTED_FUNCTIONS=["_main"$(COMMA)"_libreofficekit_hook"$(COMMA)"_libreofficekit_hook_2"$(COMMA)"_lok_preinit"$(COMMA)"_lok_preinit_2"$(COMMA)"_lok_convertDocument"$(COMMA)"_lok_convertFree"$(COMMA)"_lok_setFontProfile"$(COMMA)"_lok_setFontProfileFree"$(COMMA)"_lok_documentLoad"$(COMMA)"_lok_documentLoadWithOptions"$(COMMA)"_lok_documentSaveAs"$(COMMA)"_lok_documentDestroy"$(COMMA)"_lok_destroy"$(COMMA)"_lok_getError"$(COMMA)"_lok_abortOperation"$(COMMA)"_lok_setOperationTimeout"$(COMMA)"_lok_getOperationState"$(COMMA)"_lok_resetAbort"$(COMMA)"_malloc"$(COMMA)"_free"] -Wl$(COMMA)--whole-archive $(call gb_StaticLibrary_get_target,unoembind) -Wl$(COMMA)--no-whole-archive \
+ ))
+ ifeq ($(ENABLE_QT6),TRUE)
+ $(eval $(call gb_Executable_add_ldflags,soffice_bin, \

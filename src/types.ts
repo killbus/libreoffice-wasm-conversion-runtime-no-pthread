@@ -296,6 +296,126 @@ export interface FontData {
   data: Uint8Array | ArrayBuffer;
 }
 
+export const FONT_PROFILE_SCHEMA_VERSION = 1 as const;
+export const EMPTY_FONT_PROFILE_FINGERPRINT =
+  'sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945' as const;
+
+export interface FontProfileFont extends FontData {
+  /** Optional caller claim. The Worker recomputes and verifies this SHA-256 digest. */
+  sha256?: string;
+}
+
+/** Complete desired optional-font set for one atomic profile transition. */
+export interface FontProfileRequest {
+  schemaVersion: typeof FONT_PROFILE_SCHEMA_VERSION;
+  transitionId: string;
+  expectedActiveFingerprint: string;
+  targetFingerprint: string;
+  fonts: FontProfileFont[];
+}
+
+export type FontProfileResultCode =
+  | 'OK'
+  | 'UNSUPPORTED'
+  | 'FONT_PROFILE_BUSY'
+  | 'STALE_ACTIVE_FINGERPRINT'
+  | 'INVALID_PROFILE'
+  | 'CACHE_CLOSE_FAILED'
+  | 'NATIVE_ERROR';
+
+export type FontProfileStage =
+  | 'validate'
+  | 'stage'
+  | 'clear'
+  | 'add'
+  | 'remove'
+  | 'replace'
+  | 'refresh'
+  | 'rollback'
+  | 'commit'
+  | 'cleanup';
+
+export interface FontProfileRuntimeIdentity {
+  worker: string;
+  module: string;
+  lok: string;
+}
+
+export interface FontProfileMutationDisposition {
+  attempted: boolean;
+  committed: boolean;
+  stage: FontProfileStage;
+}
+
+export interface FontProfileRollbackDisposition {
+  attempted: boolean;
+  succeeded: boolean | null;
+}
+
+export interface FontProfileDiagnostics {
+  activeFontCount: number;
+  activeFontBytes: number;
+  stagedFontCount: number;
+  retiredFontCount: number;
+  cleanupDebtPaths: string[];
+  profileFileCount?: number;
+  wasmHeapBytes?: number;
+  native?: Record<string, unknown>;
+  messages: string[];
+}
+
+export interface FontProfileResult {
+  schemaVersion: typeof FONT_PROFILE_SCHEMA_VERSION;
+  transitionId: string;
+  ok: boolean;
+  code: FontProfileResultCode;
+  expectedActiveFingerprint: string;
+  targetFingerprint: string;
+  activeFingerprint: string;
+  appliedFingerprint: string;
+  addedCount: number;
+  removedCount: number;
+  mutation: FontProfileMutationDisposition;
+  rollback: FontProfileRollbackDisposition;
+  stateKnown: boolean;
+  runtimeReusable: boolean;
+  quarantine: boolean;
+  identity: FontProfileRuntimeIdentity;
+  diagnostics: FontProfileDiagnostics;
+}
+
+export interface NativeFontProfileManifestEntry {
+  sha256: string;
+  filename: string;
+  path: string;
+  url: string;
+  byteLength: number;
+}
+
+export interface NativeFontProfileRequest {
+  schemaVersion: typeof FONT_PROFILE_SCHEMA_VERSION;
+  transitionId: string;
+  expectedActiveFingerprint: string;
+  targetFingerprint: string;
+  targetManifest: NativeFontProfileManifestEntry[];
+  added: NativeFontProfileManifestEntry[];
+  removed: NativeFontProfileManifestEntry[];
+}
+
+export interface NativeFontProfileResult {
+  ok: boolean;
+  code?: string;
+  stage?: FontProfileStage;
+  appliedFingerprint?: string;
+  addedCount?: number;
+  removedCount?: number;
+  mutation?: Partial<FontProfileMutationDisposition>;
+  rollback?: Partial<FontProfileRollbackDisposition>;
+  stateKnown?: boolean;
+  runtimeReusable?: boolean;
+  diagnostics?: Record<string, unknown>;
+}
+
 /** Required browser runtime files for the no-pthread profile. */
 export interface BrowserWasmCorePaths {
   /** URL to soffice.js - the main Emscripten loader script */
@@ -542,6 +662,8 @@ export interface EmscriptenModule {
     resultSlot: number
   ) => number;
   _lok_convertFree?: (allocation: number) => void;
+  _lok_setFontProfile?: (kit: number, requestJson: number) => number;
+  _lok_setFontProfileFree?: (allocation: number) => void;
 
   // WebAssembly function table for indirect calls
   wasmTable?: WebAssembly.Table;
@@ -1085,4 +1207,9 @@ export interface ILibreOfficeConverter {
     filename?: string
   ): Promise<ConversionResult>;
 
+}
+
+/** Conversion runtime that supports transactional dynamic optional-font profiles. */
+export interface IFontProfileConverter extends ILibreOfficeConverter {
+  setFontProfile(profile: FontProfileRequest): Promise<FontProfileResult>;
 }

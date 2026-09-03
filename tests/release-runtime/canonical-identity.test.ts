@@ -67,6 +67,12 @@ describe('frozen candidate-ID derivation', () => {
     expect(identity(undefined, { ...FROZEN_PROVENANCE, native: { ...FROZEN_PROVENANCE.native, abi: 'lok-convert-document-v2' } })).not.toBe(FROZEN_CANDIDATE_ID)
     expect(identity(undefined, { ...FROZEN_PROVENANCE, native: { ...FROZEN_PROVENANCE.native, schemaVersion: 2 } })).not.toBe(FROZEN_CANDIDATE_ID)
     expect(identity(undefined, undefined, { threading: 'future-model' })).not.toBe(FROZEN_CANDIDATE_ID)
+    expect(
+      identity(undefined, undefined, {
+        threading: 'none',
+        capabilities: { dynamicFontProfiles: 1 },
+      })
+    ).not.toBe(FROZEN_CANDIDATE_ID)
   })
 
   it('keeps runtime/path/role identity fields but never source roots or timestamps', () => {

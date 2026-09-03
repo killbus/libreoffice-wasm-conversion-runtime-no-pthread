@@ -93,6 +93,7 @@ function buildReleaseNotes({ candidateId, provenance, runtime, assets, archiveSh
     `| Native schema | \`${provenance.native.schemaVersion}\` |`,
     `| Wrapper commit | \`${provenance.wrapper.commit}\` |`,
     `| Threading | \`${runtime.threading}\` |`,
+    `| Dynamic font profiles | \`${runtime.capabilities?.dynamicFontProfiles === 1 ? 'yes' : 'no'}\` |`,
     ``,
     `## Payload archive`,
     ``,

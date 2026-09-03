@@ -145,8 +145,8 @@ export async function verifyArchive(options) {
   ) {
     throw new VerifyError('provenance drift between manifest and frozen spec')
   }
-  if (manifest.runtime.threading !== spec.runtime.threading) {
-    throw new VerifyError('runtime threading drift between manifest and spec')
+  if (JSON.stringify(manifest.runtime) !== JSON.stringify(spec.runtime)) {
+    throw new VerifyError('runtime metadata drift between manifest and spec')
   }
 
   await inspectNoPthreadRuntime(join(extractRoot, 'wasm'))

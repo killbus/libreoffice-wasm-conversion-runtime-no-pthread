@@ -51,7 +51,7 @@ jobs:
             libharfbuzz-dev libicu-dev libjpeg-dev liblcms2-dev \
             libpng-dev libssl-dev libtool libxml2-dev libxslt1-dev \
             pkg-config uuid-dev xsltproc zip unzip wget curl \
-            ca-certificates xz-utils
+            ca-certificates xz-utils fonts-noto-cjk fontconfig python3-fonttools poppler-utils
 
       - name: Build JavaScript bundles
         run: node scripts/build-js-bundles.mjs
@@ -89,6 +89,36 @@ jobs:
       - name: Run fresh native conversion gate
         run: npx vitest run tests/converter-gate.test.ts
 
+      - name: Stage CJK qualification font
+        run: |
+          set -euo pipefail
+          FONT_PATH="$(find /usr/share/fonts -type f -iname 'NotoSansCJK-Regular.ttc' -print -quit)"
+          test -n "$FONT_PATH"
+          mkdir -p tests/fixtures-ci
+          cp "$FONT_PATH" tests/fixtures-ci/NotoSansCJK-Regular.ttc
+          pyftsubset "$FONT_PATH" --font-number=2 \
+            --unicodes=U+0020,U+0041,U+4E2D \
+            --layout-features='*' --glyph-names --symbol-cmap --legacy-cmap \
+            --notdef-glyph --notdef-outline --recommended-glyphs \
+            --name-IDs='*' --name-legacy --name-languages='*' \
+            --output-file=tests/fixtures-ci/NotoSansCJK-Profile-A.otf
+          pyftsubset "$FONT_PATH" --font-number=2 \
+            --unicodes=U+0020,U+0041,U+6587 \
+            --layout-features='*' --glyph-names --symbol-cmap --legacy-cmap \
+            --notdef-glyph --notdef-outline --recommended-glyphs \
+            --name-IDs='*' --name-legacy --name-languages='*' \
+            --output-file=tests/fixtures-ci/NotoSansCJK-Profile-B.otf
+          test "$(fc-scan --format='%{family[0]}|%{style[0]}' tests/fixtures-ci/NotoSansCJK-Profile-A.otf)" = \
+            "$(fc-scan --format='%{family[0]}|%{style[0]}' tests/fixtures-ci/NotoSansCJK-Profile-B.otf)"
+          test "$(sha256sum tests/fixtures-ci/NotoSansCJK-Profile-A.otf | cut -d' ' -f1)" != \
+            "$(sha256sum tests/fixtures-ci/NotoSansCJK-Profile-B.otf | cut -d' ' -f1)"
+
+      - name: Install Chromium for runtime qualification
+        run: npx playwright install --with-deps chromium
+
+      - name: Qualify dynamic font-profile lifecycle
+        run: npx playwright test tests/browser/font-profile-lifecycle.spec.ts --project=chromium --workers=1
+
       - name: Upload no-pthread WASM artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,6 +130,8 @@ jobs:
             wasm/soffice.cjs
             wasm/soffice.js
             wasm/soffice.data.js.metadata
+            wasm/font-profile-qualification.json
+            wasm/font-profile-fault-qualification.json
           retention-days: 14
           if-no-files-found: warn
 
