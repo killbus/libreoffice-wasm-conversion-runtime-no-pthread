@@ -11,9 +11,15 @@ on:
         required: false
         type: boolean
         default: true
+      artifact_run_id:
+        description: 'Reuse WASM artifacts from this workflow run and run qualification only'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 env:
   LIBREOFFICE_VERSION: libreoffice-24-8
@@ -51,12 +57,13 @@ jobs:
             libharfbuzz-dev libicu-dev libjpeg-dev liblcms2-dev \
             libpng-dev libssl-dev libtool libxml2-dev libxslt1-dev \
             pkg-config uuid-dev xsltproc zip unzip wget curl \
-            ca-certificates xz-utils fonts-noto-cjk fontconfig python3-fonttools poppler-utils
+            ca-certificates xz-utils fonts-noto-cjk fontconfig fonttools poppler-utils
 
       - name: Build JavaScript bundles
         run: node scripts/build-js-bundles.mjs
 
       - name: Cache pinned LibreOffice source and Emscripten
+        if: ${{ inputs.artifact_run_id == '' }}
         uses: actions/cache@v4
         with:
           path: |
@@ -67,6 +74,7 @@ jobs:
             ${{ runner.os }}-lo-${{ env.LIBREOFFICE_COMMIT }}-emsdk-${{ env.EMSDK_VERSION }}-no-pthread-
 
       - name: Free disk space
+        if: ${{ inputs.artifact_run_id == '' }}
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -74,6 +82,7 @@ jobs:
           df -h /
 
       - name: Build LibreOffice WASM
+        if: ${{ inputs.artifact_run_id == '' }}
         env:
           BUILD_JOBS: '4'
           SKIP_DEPS: '0'
@@ -82,6 +91,16 @@ jobs:
         run: |
           rm -f wasm/soffice.*
           bash build/build-wasm.sh
+
+      - name: Download prebuilt WASM artifacts
+        if: ${{ inputs.artifact_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: soffice-wasm-no-pthread-${{ inputs.artifact_run_id }}
+          path: wasm
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
 
       - name: Verify no-pthread runtime contract
         run: npm run verify:no-pthread
