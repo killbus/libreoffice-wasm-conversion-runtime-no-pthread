@@ -27,13 +27,16 @@ const attributes = readText('.gitattributes');
 const ignore = readText('.gitignore');
 
 const candidateId =
-  'c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9';
+  '85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190';
 
 describe('release-only qualified runtime source', () => {
   it('selects the same qualified no-pthread candidate used for staging', () => {
     expect(candidateSpec.candidateId).toBe(candidateId);
     expect(qualifiedSpec.candidateId).toBe(candidateId);
-    expect(candidateSpec.runtime).toEqual({ threading: 'none' });
+    expect(candidateSpec.runtime).toEqual({
+      threading: 'none',
+      capabilities: { dynamicFontProfiles: 1 },
+    });
     expect(qualifiedSpec).toEqual(candidateSpec);
     expect(runtimeSource.candidateId).toBe(qualifiedSpec.candidateId);
     expect(runtimeSource.specPath).toBe(
@@ -48,11 +51,11 @@ describe('release-only qualified runtime source', () => {
       candidateQualified: true,
       releaseQualified: true,
       draft: false,
-      releaseId: '379978707',
-      releaseAssetId: '538393011',
-      releaseAssetBytes: 246978336,
+      releaseId: '382252828',
+      releaseAssetId: '543184129',
+      releaseAssetBytes: 247029040,
       releaseAssetSha256:
-        '6b8b31cf5bb8753e5937145c24006348ff81622a95faa7c580a82647c46fbf2c',
+        '3f19475b0eeff1706f2b23b778b5e310bee9cf987e6a4ce75c5a2c295a3f3b94',
     });
     expect(runtimeSource.releaseAssetName).toBe(
       qualifiedSpec.expectedPayloadArchiveName,

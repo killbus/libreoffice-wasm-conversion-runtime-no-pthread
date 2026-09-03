@@ -1,33 +1,36 @@
 {
   "kind": "libreoffice-wasm-runtime-frozen-spec",
   "schemaVersion": 1,
-  "candidateId": "c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9",
+  "candidateId": "85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190",
   "provenance": {
     "native": {
-      "commit": "2acc06e13040eee9e42e61005e73cdf952ae67fd",
-      "githubActionsRunId": "33412490741",
-      "abi": "lok-convert-document-v1",
+      "commit": "c24d7f46e45333cca306fa5c6472279bef9346ce",
+      "githubActionsRunId": "33761453035",
+      "abi": "lok-convert-document-font-profile-v1",
       "schemaVersion": 1
     },
     "wrapper": {
-      "commit": "2acc06e13040eee9e42e61005e73cdf952ae67fd"
+      "commit": "c24d7f46e45333cca306fa5c6472279bef9346ce"
     }
   },
   "runtime": {
-    "threading": "none"
+    "threading": "none",
+    "capabilities": {
+      "dynamicFontProfiles": 1
+    }
   },
   "originalNativeArchive": {
-    "name": "soffice-wasm-no-pthread-33412490741.zip",
-    "bytes": 78769280,
-    "sha256": "a83131d6c08c37faf9cff05305fb36bf5547e2f9c5da62323f3f8634f12d82dc"
+    "name": "soffice-wasm-no-pthread-33761453035.zip",
+    "bytes": 78788192,
+    "sha256": "a7fca9a29e57883ab6e07c298bfbc7d28ec1061d4745b343fbd0170848ff7d9a"
   },
   "assets": [
     {
       "path": "dist/browser.d.ts",
       "role": "browserTypes",
       "mimeType": "text/plain",
-      "bytes": 15889,
-      "sha256": "31651bfee684a4a0e1a6c94b25adea20410e0d5a8f1504aede947bba576ce6b9",
+      "bytes": 19043,
+      "sha256": "e9fbb41b87ec581c7d26e76f709b888b959192324f3d70f9caa0cfadc998a570",
       "sourceRoot": "wrapper",
       "sourcePath": "dist/browser.d.ts"
     },
@@ -35,8 +38,8 @@
       "path": "dist/browser.js",
       "role": "browserModule",
       "mimeType": "text/javascript",
-      "bytes": 90277,
-      "sha256": "a2956d468193de941602c02d3d3b3f88f21e68d72b893e3a27c37f675c314d17",
+      "bytes": 92378,
+      "sha256": "628816283081fcb337857f79bdf7834a903763366318818802dde2e0ac356792",
       "sourceRoot": "wrapper",
       "sourcePath": "dist/browser.js"
     },
@@ -44,8 +47,8 @@
       "path": "dist/browser.worker.global.js",
       "role": "browserWorker",
       "mimeType": "text/javascript",
-      "bytes": 121754,
-      "sha256": "8bb3e6b2321f832be5219de786b2511c07f5c83c37c3a4f323a126ebaae749df",
+      "bytes": 131128,
+      "sha256": "aacbdeee21a66082d7c98a6a345a1860679691697f61339d2bda3683a40db0df",
       "sourceRoot": "wrapper",
       "sourcePath": "dist/browser.worker.global.js"
     },
@@ -62,8 +65,8 @@
       "path": "wasm/soffice.cjs",
       "role": "nodeGlue",
       "mimeType": "text/javascript",
-      "bytes": 414054,
-      "sha256": "feb653e20983238a2baa256c3823b3f73823531a36016c778bcc7d4afc34c457",
+      "bytes": 414262,
+      "sha256": "95f9dc615eaa774b91d576ab918362f73d5d23debe1d76e1c7a9bda04bd82add",
       "sourceRoot": "native",
       "sourcePath": "soffice.cjs"
     },
@@ -72,7 +75,7 @@
       "role": "filesystemData",
       "mimeType": "application/octet-stream",
       "bytes": 99735790,
-      "sha256": "2f152a0691284deb9dfbee0a925fe4166587e063fa84eacdcb1413a272d035de",
+      "sha256": "7353e07b639e8ce7daed3c714c9f110215372124fcaa056cae781615b1137268",
       "sourceRoot": "native",
       "sourcePath": "soffice.data"
     },
@@ -80,8 +83,8 @@
       "path": "wasm/soffice.js",
       "role": "browserGlue",
       "mimeType": "text/javascript",
-      "bytes": 414054,
-      "sha256": "feb653e20983238a2baa256c3823b3f73823531a36016c778bcc7d4afc34c457",
+      "bytes": 414262,
+      "sha256": "95f9dc615eaa774b91d576ab918362f73d5d23debe1d76e1c7a9bda04bd82add",
       "sourceRoot": "native",
       "sourcePath": "soffice.js"
     },
@@ -89,8 +92,8 @@
       "path": "wasm/soffice.wasm",
       "role": "wasmBinary",
       "mimeType": "application/wasm",
-      "bytes": 146171647,
-      "sha256": "0ca7ecf05c26e87c714e72a0cee705ac4254dfd81f504683a75e6abfb661a709",
+      "bytes": 146207233,
+      "sha256": "5fcbe666d9c697b8ab31bf3b3eacc8739559093e4c33a2a6b296850a6f5e3b2b",
       "sourceRoot": "native",
       "sourcePath": "soffice.wasm"
     }
@@ -99,5 +102,5 @@
     "CANDIDATE-MANIFEST.json",
     "ASSET-SHA256SUMS"
   ],
-  "expectedPayloadArchiveName": "libreoffice-wasm-runtime-c1fe3173b26a9eab9ef169fe91961bd32fceadbc9b1423ac8b1c8178f577eeb9.zip"
+  "expectedPayloadArchiveName": "libreoffice-wasm-runtime-85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190.zip"
 }

@@ -34,6 +34,14 @@ const FROZEN_PROVENANCE = {
 
 const FROZEN_RUNTIME = { threading: 'none' }
 
+const QUALIFIED_CANDIDATE_ID =
+  '85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190'
+
+const QUALIFIED_RUNTIME = {
+  threading: 'none',
+  capabilities: { dynamicFontProfiles: 1 },
+}
+
 function identity(assets = FROZEN_ASSETS, provenance = FROZEN_PROVENANCE, runtime = FROZEN_RUNTIME) {
   return deriveCandidateIdentity({ provenance, runtime, assets })
 }
@@ -104,8 +112,8 @@ describe('frozen spec schema', () => {
       const specPath = resolve(fileURLToPath(import.meta.url), `../../../scripts/release-runtime/${filename}`)
       const spec = JSON.parse(await readFile(specPath, 'utf8'))
       expect(validateFrozenSpec(spec)).toMatchObject({
-        candidateId: FROZEN_CANDIDATE_ID,
-        runtime: FROZEN_RUNTIME,
+        candidateId: QUALIFIED_CANDIDATE_ID,
+        runtime: QUALIFIED_RUNTIME,
       })
     }
   })
