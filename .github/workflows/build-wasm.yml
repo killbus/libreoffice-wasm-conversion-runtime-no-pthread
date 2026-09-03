@@ -16,9 +16,14 @@ on:
         required: false
         type: string
         default: ""
+      stage_release_candidate:
+        description: "After reused-artifact qualification, stage the frozen candidate as a draft Release"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 env:
@@ -101,6 +106,12 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.artifact_run_id }}
+
+      - name: Validate release-staging inputs
+        if: ${{ inputs.stage_release_candidate }}
+        run: |
+          set -euo pipefail
+          test -n "${{ inputs.artifact_run_id }}"
 
       - name: Resolve runtime provenance
         env:
@@ -190,6 +201,20 @@ jobs:
             wasm/font-profile-fault-qualification.json
           retention-days: 7
           if-no-files-found: error
+
+      - name: Stage qualified runtime draft Release
+        if: ${{ success() && inputs.artifact_run_id != '' && inputs.stage_release_candidate }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/release-runtime/stage-draft.mjs \
+            --native-root wasm \
+            --wrapper-root . \
+            --work-root "$RUNNER_TEMP/runtime-release" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$NATIVE_BUILD_HEAD_SHA" \
+            --spec scripts/release-runtime/pending-candidate-spec.json \
+            --expected-candidate-id 85a039aba424bedba15c75728d071aeaa678314ae4e161e88394674755009190
 
       - name: Upload failed-build diagnostics
         if: failure()
