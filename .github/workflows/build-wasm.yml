@@ -7,15 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       clean_build:
-        description: 'Discard cached build outputs and rebuild from scratch'
+        description: "Discard cached build outputs and rebuild from scratch"
         required: false
         type: boolean
         default: true
       artifact_run_id:
-        description: 'Reuse WASM artifacts from this workflow run and run qualification only'
+        description: "Reuse WASM artifacts from this workflow run and run qualification only"
         required: false
         type: string
-        default: ''
+        default: ""
 
 permissions:
   contents: read
@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - name: Install npm dependencies
@@ -84,10 +84,10 @@ jobs:
       - name: Build LibreOffice WASM
         if: ${{ inputs.artifact_run_id == '' }}
         env:
-          BUILD_JOBS: '4'
-          SKIP_DEPS: '0'
+          BUILD_JOBS: "4"
+          SKIP_DEPS: "0"
           CLEAN_BUILD: ${{ inputs.clean_build && '1' || '0' }}
-          RESET_PATCHED_SOURCE: '1'
+          RESET_PATCHED_SOURCE: "1"
         run: |
           rm -f wasm/soffice.*
           bash build/build-wasm.sh
@@ -112,13 +112,20 @@ jobs:
             NATIVE_BUILD_HEAD_SHA="$(bash scripts/retry-command.sh gh api \
               "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}" --jq .head_sha)"
             NATIVE_BUILD_RUN_ID="$ARTIFACT_RUN_ID"
+            QUALIFICATION_BUILD_MODE="reused-artifact"
           else
             NATIVE_BUILD_HEAD_SHA="$GITHUB_SHA"
             NATIVE_BUILD_RUN_ID="$GITHUB_RUN_ID"
+            if [ "${{ inputs.clean_build }}" = "true" ]; then
+              QUALIFICATION_BUILD_MODE="fresh-clean"
+            else
+              QUALIFICATION_BUILD_MODE="fresh-incremental"
+            fi
           fi
           {
             echo "NATIVE_BUILD_HEAD_SHA=$NATIVE_BUILD_HEAD_SHA"
             echo "NATIVE_BUILD_RUN_ID=$NATIVE_BUILD_RUN_ID"
+            echo "QUALIFICATION_BUILD_MODE=$QUALIFICATION_BUILD_MODE"
           } >> "$GITHUB_ENV"
 
       - name: Verify no-pthread runtime contract
@@ -157,8 +164,8 @@ jobs:
       - name: Qualify dynamic font-profile lifecycle
         run: npx playwright test tests/browser/font-profile-lifecycle.spec.ts --project=chromium --workers=1
 
-      - name: Upload no-pthread WASM artifacts
-        if: always()
+      - name: Upload qualified no-pthread WASM artifacts
+        if: ${{ success() && inputs.artifact_run_id == '' && inputs.clean_build }}
         uses: actions/upload-artifact@v4
         with:
           name: soffice-wasm-no-pthread-${{ github.run_id }}
@@ -171,7 +178,31 @@ jobs:
             wasm/font-profile-qualification.json
             wasm/font-profile-fault-qualification.json
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
+
+      - name: Upload reused-artifact qualification evidence
+        if: ${{ success() && inputs.artifact_run_id != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: requalified-soffice-wasm-no-pthread-${{ github.run_id }}
+          path: |
+            wasm/font-profile-qualification.json
+            wasm/font-profile-fault-qualification.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload failed-build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-soffice-wasm-no-pthread-${{ github.run_id }}
+          path: |
+            wasm/font-profile-qualification.json
+            wasm/font-profile-fault-qualification.json
+            playwright-report/
+            test-results/
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Report sizes
         if: always()

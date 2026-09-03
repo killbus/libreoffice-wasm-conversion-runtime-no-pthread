@@ -4,7 +4,8 @@
 
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
-import { lstat, open, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdtemp, open, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseOptions, CliUsageError } from "./lib/cli.mjs";
@@ -13,6 +14,7 @@ import {
   serializePrettyJson,
 } from "./lib/canonical.mjs";
 import { validateFrozenSpec } from "./lib/schemata.mjs";
+import { extractZip } from "./lib/zip-reader.mjs";
 
 const NATIVE_FILES = new Map([
   ["soffice.cjs", 10_000],
@@ -40,6 +42,16 @@ const QUALIFICATION_RUNTIME_ASSET_NAMES = [
 ];
 const QUALIFICATION_SOURCE_FILES = new Map([
   [".github/workflows/build-wasm.yml", ".github/workflows/build-wasm.yml"],
+  ["build/autogen.input", "build/autogen.input"],
+  ["build/build-wasm.sh", "build/build-wasm.sh"],
+  ["build/patch-stack.sh", "build/patch-stack.sh"],
+  ["dev-server.mjs", "dev-server.mjs"],
+  ["package-lock.json", "package-lock.json"],
+  ["playwright.config.ts", "playwright.config.ts"],
+  [
+    "scripts/inspect-no-pthread-runtime.mjs",
+    "scripts/inspect-no-pthread-runtime.mjs",
+  ],
   [
     "tests/browser/font-profile-lifecycle.spec.ts",
     "tests/browser/font-profile-lifecycle.spec.ts",
@@ -51,6 +63,7 @@ const QUALIFICATION_SOURCE_FILES = new Map([
   ["src/browser.ts", "src/browser.ts"],
   ["src/browser.worker.ts", "src/browser.worker.ts"],
   ["src/lok-bindings.ts", "src/lok-bindings.ts"],
+  ["src/types.ts", "src/types.ts"],
   [
     "build/patches/wasm-font-removal-primitives.patch",
     "build/patches/wasm-font-removal-primitives.patch",
@@ -58,6 +71,10 @@ const QUALIFICATION_SOURCE_FILES = new Map([
   [
     "build/patches/wasm-font-profile-abi.patch",
     "build/patches/wasm-font-profile-abi.patch",
+  ],
+  [
+    "build/patches/wasm-font-profile-diagnostics.patch",
+    "build/patches/wasm-font-profile-diagnostics.patch",
   ],
 ]);
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -144,6 +161,51 @@ async function inspectRegularFile(filePath, label) {
   };
 }
 
+function sha256Bytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function validateNativeArchiveMatchesRoot(nativeArchive, nativeRoot) {
+  const extractRoot = await mkdtemp(join(tmpdir(), "lo-native-artifact-"));
+  try {
+    const archiveEntries = await extractZip(
+      await readFile(nativeArchive),
+      extractRoot,
+    );
+    const archiveNames = archiveEntries.map((entry) => entry.name).sort();
+    const rootNames = (await readdir(nativeRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && !entry.isSymbolicLink())
+      .map((entry) => entry.name)
+      .sort();
+    if (JSON.stringify(archiveNames) !== JSON.stringify(rootNames)) {
+      throw new FreezeCandidateError(
+        "native archive entries do not match the extracted native root",
+      );
+    }
+    for (const entry of archiveEntries) {
+      const rootFile = await inspectRegularFile(
+        join(nativeRoot, entry.name),
+        `native archive entry ${entry.name}`,
+      );
+      if (
+        rootFile.bytes !== entry.bytes.length ||
+        rootFile.sha256 !== sha256Bytes(entry.bytes)
+      ) {
+        throw new FreezeCandidateError(
+          `native archive entry does not match extracted file: ${entry.name}`,
+        );
+      }
+    }
+  } catch (cause) {
+    if (cause instanceof FreezeCandidateError) throw cause;
+    throw new FreezeCandidateError(
+      `native archive could not be verified against the extracted root: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  } finally {
+    await rm(extractRoot, { recursive: true, force: true });
+  }
+}
+
 async function readPrefix(filePath, length = 160) {
   const handle = await open(filePath, "r");
   try {
@@ -168,6 +230,147 @@ function validateHashBindingMap(actual, expected, label) {
     if (!SHA256_PATTERN.test(actual[name]) || actual[name] !== expected[name]) {
       throw new FreezeCandidateError(`${label} hash mismatch for ${name}`);
     }
+  }
+}
+
+const ACTIVE_NATIVE_REGISTRY_FIELDS = [
+  "printFontManagerRecords",
+  "fontconfigApplicationPatterns",
+  "freetypeFontInfoRecords",
+];
+
+function validateNativeRegistryDiagnostics(qualification) {
+  const evidence = qualification?.nativeRegistryDiagnostics;
+  const transitions = evidence?.transitions;
+  const expectedTransitionCount = qualification?.profileCycles * 2 + 4;
+  if (
+    !Number.isInteger(qualification?.profileCycles) ||
+    qualification.profileCycles < 10 ||
+    evidence?.maxRetainedFontFiles !== 3 ||
+    !Array.isArray(transitions) ||
+    transitions.length !== expectedTransitionCount
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence registry diagnostics are incomplete",
+    );
+  }
+
+  for (const snapshot of transitions) {
+    if (
+      snapshot?.registryCountsAvailable !== true ||
+      ![
+        "activeFontCount",
+        "activeFontBytes",
+        ...ACTIVE_NATIVE_REGISTRY_FIELDS,
+        "freetypeFontFileRecords",
+      ].every(
+        (field) => Number.isInteger(snapshot?.[field]) && snapshot[field] >= 0,
+      ) ||
+      snapshot.freetypeFontFileRecords > evidence.maxRetainedFontFiles
+    ) {
+      throw new FreezeCandidateError(
+        "native font-profile qualification evidence registry diagnostics are invalid",
+      );
+    }
+  }
+
+  const lifecycle = transitions.slice(0, qualification.profileCycles * 2);
+  const enabled = lifecycle.filter((_, index) => index % 2 === 0);
+  const disabled = lifecycle.filter((_, index) => index % 2 === 1);
+  if (
+    enabled.some(
+      (snapshot) =>
+        snapshot.activeFontCount !== 1 ||
+        snapshot.activeFontBytes <= 0 ||
+        ACTIVE_NATIVE_REGISTRY_FIELDS.some((field) => snapshot[field] <= 0),
+    ) ||
+    disabled.some(
+      (snapshot) =>
+        snapshot.activeFontCount !== 0 ||
+        snapshot.activeFontBytes !== 0 ||
+        ACTIVE_NATIVE_REGISTRY_FIELDS.some((field) => snapshot[field] !== 0),
+    )
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence active registries do not follow the profile lifecycle",
+    );
+  }
+
+  const activeRegistrySignatures = enabled.map((snapshot) =>
+    ACTIVE_NATIVE_REGISTRY_FIELDS.map((field) => snapshot[field]).join(":"),
+  );
+  const lifecycleFileCounts = lifecycle.map(
+    (snapshot) => snapshot.freetypeFontFileRecords,
+  );
+  if (
+    new Set(activeRegistrySignatures).size !== 1 ||
+    new Set(lifecycleFileCounts).size !== 1 ||
+    lifecycleFileCounts[0] < 1
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence registries grow across repeated profile cycles",
+    );
+  }
+
+  const retainedBudget = qualification?.retainedFontBudget;
+  if (
+    retainedBudget?.maxPaths !== 128 ||
+    retainedBudget?.maxSourceBytes !== 512 * 1024 * 1024 ||
+    !Array.isArray(retainedBudget?.pathCounts) ||
+    !Array.isArray(retainedBudget?.sourceByteCounts) ||
+    retainedBudget.pathCounts.length !== transitions.length ||
+    retainedBudget.sourceByteCounts.length !== transitions.length ||
+    retainedBudget.pathCounts.some(
+      (count, index) =>
+        !Number.isInteger(count) ||
+        count < 0 ||
+        count > retainedBudget.maxPaths ||
+        count !== transitions[index].freetypeFontFileRecords ||
+        (index > 0 && count < retainedBudget.pathCounts[index - 1]),
+    ) ||
+    retainedBudget.sourceByteCounts.some(
+      (bytes, index) =>
+        !Number.isInteger(bytes) ||
+        bytes < 0 ||
+        bytes > retainedBudget.maxSourceBytes ||
+        (index > 0 && bytes < retainedBudget.sourceByteCounts[index - 1]),
+    )
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence retained-font budget is invalid",
+    );
+  }
+
+  const replacements = transitions.slice(qualification.profileCycles * 2);
+  if (
+    replacements.length !== 4 ||
+    replacements
+      .slice(0, 3)
+      .some(
+        (snapshot) =>
+          snapshot.activeFontCount !== 1 ||
+          snapshot.activeFontBytes <= 0 ||
+          ACTIVE_NATIVE_REGISTRY_FIELDS.some((field) => snapshot[field] <= 0),
+      ) ||
+    replacements[3].activeFontCount !== 0 ||
+    replacements[3].activeFontBytes !== 0 ||
+    ACTIVE_NATIVE_REGISTRY_FIELDS.some((field) => replacements[3][field] !== 0)
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence replacement registries do not return to the default profile",
+    );
+  }
+
+  const replacementFileCounts = replacements.map(
+    (snapshot) => snapshot.freetypeFontFileRecords,
+  );
+  if (
+    replacementFileCounts[2] > Math.max(...replacementFileCounts.slice(0, 2)) ||
+    replacementFileCounts[3] > Math.max(...replacementFileCounts.slice(0, 3))
+  ) {
+    throw new FreezeCandidateError(
+      "native font-profile qualification evidence FreeType font-file cache does not reach a bounded plateau",
+    );
   }
 }
 
@@ -269,6 +472,7 @@ async function validateNativeRoot(nativeRoot, expected) {
       `native artifact is missing a valid ${FONT_PROFILE_QUALIFICATION_FILE}: ${cause instanceof Error ? cause.message : String(cause)}`,
     );
   }
+  validateNativeRegistryDiagnostics(qualification);
   if (
     qualification?.schemaVersion !== 1 ||
     qualification?.kind !== "libreoffice-wasm-font-profile-qualification" ||
@@ -278,11 +482,21 @@ async function validateNativeRoot(nativeRoot, expected) {
     qualification?.nativeCommit !== expected.nativeCommit ||
     qualification?.wrapperCommit !== expected.wrapperCommit ||
     qualification?.dynamicFontProfiles !== 1 ||
+    qualification?.buildMode !== "fresh-clean" ||
     qualification?.cacheDisabled !== true ||
     qualification?.coreAssetsServedWithNoStore !== true ||
     qualification?.serviceWorkersBypassed !== true ||
     qualification?.profileCycles < 10 ||
     qualification?.stableRuntimeIdentity !== true ||
+    !Array.isArray(qualification?.runtimeIdentities) ||
+    qualification.runtimeIdentities.length !==
+      qualification.profileCycles * 2 + 4 ||
+    !qualification.runtimeIdentities.every(
+      (identity) =>
+        identity?.worker === qualification.runtimeIdentity?.worker &&
+        identity?.module === qualification.runtimeIdentity?.module &&
+        identity?.lok === qualification.runtimeIdentity?.lok,
+    ) ||
     qualification?.cleanupDebtFree !== true ||
     qualification?.workerLifecycle?.created !== 1 ||
     qualification?.workerLifecycle?.closedAfterDestroy !== 1 ||
@@ -357,14 +571,45 @@ async function validateNativeRoot(nativeRoot, expected) {
     faultQualification?.nativeBuildRunId !== String(expected.runId) ||
     faultQualification?.nativeCommit !== expected.nativeCommit ||
     faultQualification?.wrapperCommit !== expected.wrapperCommit ||
+    faultQualification?.buildMode !== "fresh-clean" ||
     faultQualification?.fault !== "malformed-sfnt-after-valid-profile" ||
     faultQualification?.mutationAttempted !== true ||
     faultQualification?.mutationCommitted !== false ||
     faultQualification?.stateKnown !== false ||
     faultQualification?.runtimeReusable !== false ||
     faultQualification?.quarantine !== true ||
-    faultQualification?.workerLifecycle?.created !== 1 ||
-    faultQualification?.workerLifecycle?.closedAfterQuarantine !== 1 ||
+    faultQualification?.workerLifecycle?.created !== 2 ||
+    faultQualification?.workerLifecycle?.closedAfterDestroy !== 2 ||
+    typeof faultQualification?.quarantinedRuntimeIdentity?.worker !==
+      "string" ||
+    typeof faultQualification?.quarantinedRuntimeIdentity?.module !==
+      "string" ||
+    typeof faultQualification?.quarantinedRuntimeIdentity?.lok !== "string" ||
+    !(faultQualification?.recovery?.conversionBytes > 0) ||
+    typeof faultQualification?.recovery?.freshRuntimeIdentity?.worker !==
+      "string" ||
+    typeof faultQualification?.recovery?.freshRuntimeIdentity?.module !==
+      "string" ||
+    typeof faultQualification?.recovery?.freshRuntimeIdentity?.lok !==
+      "string" ||
+    faultQualification?.recovery?.differsFromQuarantinedRuntime !== true ||
+    ["worker", "module", "lok"].some(
+      (field) =>
+        faultQualification.recovery.freshRuntimeIdentity[field] ===
+        faultQualification.quarantinedRuntimeIdentity[field],
+    ) ||
+    faultQualification?.recovery?.stateKnown !== true ||
+    faultQualification?.recovery?.runtimeReusable !== true ||
+    faultQualification?.recovery?.quarantine !== false ||
+    faultQualification?.recovery?.nativeDiagnostics?.registryCountsAvailable !==
+      true ||
+    faultQualification?.recovery?.nativeDiagnostics?.activeFontCount !== 0 ||
+    faultQualification?.recovery?.nativeDiagnostics?.activeFontBytes !== 0 ||
+    ACTIVE_NATIVE_REGISTRY_FIELDS.some(
+      (field) => faultQualification?.recovery?.nativeDiagnostics?.[field] !== 0,
+    ) ||
+    faultQualification?.recovery?.nativeDiagnostics?.freetypeFontFileRecords !==
+      0 ||
     ![
       "browser.worker.global.js",
       "soffice.js",
@@ -372,7 +617,7 @@ async function validateNativeRoot(nativeRoot, expected) {
       "soffice.data",
     ].every(
       (assetName) =>
-        faultQualification?.serverCoreRequestCounts?.[assetName] === 1,
+        faultQualification?.serverCoreRequestCounts?.[assetName] === 2,
     )
   ) {
     throw new FreezeCandidateError(
@@ -414,6 +659,7 @@ export async function freezeCandidate(options) {
     qualificationEvidence.faultQualification,
     assets,
   );
+  await validateNativeArchiveMatchesRoot(nativeArchive, nativeRoot);
 
   const provenance = {
     native: {

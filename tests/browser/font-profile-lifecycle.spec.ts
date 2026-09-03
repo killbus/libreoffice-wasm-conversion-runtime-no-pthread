@@ -5,7 +5,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import type { FontProfileResult } from "../../src/types.js";
+import type {
+  FontProfileResult,
+  NativeFontProfileDiagnostics,
+} from "../../src/types.js";
 import {
   writeFontProfileFaultQualificationEvidence,
   writeFontProfileQualificationEvidence,
@@ -29,6 +32,24 @@ const coreAssetNames = new Set([
   "soffice.wasm",
   "soffice.data",
 ]);
+
+const activeRegistryKeys = [
+  "printFontManagerRecords",
+  "fontconfigApplicationPatterns",
+  "freetypeFontInfoRecords",
+] as const;
+
+function requireNativeDiagnostics(
+  transition: FontProfileResult,
+): NativeFontProfileDiagnostics {
+  const diagnostics = transition.diagnostics.native;
+  if (!diagnostics || diagnostics.registryCountsAvailable !== true) {
+    throw new Error(
+      `Native registry diagnostics unavailable: ${JSON.stringify(transition)}`,
+    );
+  }
+  return diagnostics;
+}
 
 async function rasterSha256(
   base64: string | undefined,
@@ -307,6 +328,9 @@ test.describe("dynamic font profile qualification", () => {
       JSON.stringify(entry.identity),
     );
     expect(new Set(identities).size).toBe(1);
+    const nativeRegistryDiagnostics = allTransitions.map(
+      requireNativeDiagnostics,
+    );
     for (const [index, transition] of result.transitions.entries()) {
       expect(transition.runtimeReusable).toBe(true);
       expect(transition.quarantine).toBe(false);
@@ -314,13 +338,46 @@ test.describe("dynamic font profile qualification", () => {
       expect(transition.diagnostics.profileFileCount).toBe(
         index % 2 === 0 ? 1 : 0,
       );
+      const native = requireNativeDiagnostics(transition);
+      expect(native.activeFontCount).toBe(index % 2 === 0 ? 1 : 0);
+      for (const key of activeRegistryKeys) {
+        if (index % 2 === 0) expect(native[key], key).toBeGreaterThan(0);
+        else expect(native[key], key).toBe(0);
+      }
+      expect(native.freetypeFontFileRecords).toBe(1);
+      expect(transition.diagnostics.retainedFontPathCount).toBe(1);
     }
+    const cjkRegistrySignatures = result.transitions
+      .filter((_, index) => index % 2 === 0)
+      .map((transition) => {
+        const native = requireNativeDiagnostics(transition);
+        return activeRegistryKeys.map((key) => native[key]).join(":");
+      });
+    expect(new Set(cjkRegistrySignatures).size).toBe(1);
+
     for (const [index, transition] of result.replacementTransitions.entries()) {
       expect(transition.runtimeReusable).toBe(true);
       expect(transition.quarantine).toBe(false);
       expect(transition.diagnostics.cleanupDebtPaths).toEqual([]);
       expect(transition.diagnostics.profileFileCount).toBe(index === 3 ? 0 : 1);
+      const native = requireNativeDiagnostics(transition);
+      expect(native.activeFontCount).toBe(index === 3 ? 0 : 1);
+      for (const key of activeRegistryKeys) {
+        if (index === 3) expect(native[key], key).toBe(0);
+        else expect(native[key], key).toBeGreaterThan(0);
+      }
     }
+    expect(
+      result.replacementTransitions.map(
+        (transition) =>
+          requireNativeDiagnostics(transition).freetypeFontFileRecords,
+      ),
+    ).toEqual([2, 3, 3, 3]);
+    expect(
+      result.replacementTransitions.map(
+        (transition) => transition.diagnostics.retainedFontPathCount,
+      ),
+    ).toEqual([2, 3, 3, 3]);
     expect(result.replacementTransitions[1]?.addedCount).toBe(1);
     expect(result.replacementTransitions[1]?.removedCount).toBe(1);
     expect(result.replacementTransitions[2]?.addedCount).toBe(1);
@@ -421,11 +478,28 @@ test.describe("dynamic font profile qualification", () => {
           closedAfterDestroy: workerCloseCount,
         },
         runtimeIdentity: identity,
+        runtimeIdentities: allTransitions.map(
+          (transition) => transition.identity,
+        ),
         stableRuntimeIdentity: true,
         cleanupDebtFree: true,
         profileFileCounts: result.transitions.map(
           (transition) => transition.diagnostics.profileFileCount,
         ),
+        nativeRegistryDiagnostics: {
+          maxRetainedFontFiles: 3,
+          transitions: nativeRegistryDiagnostics,
+        },
+        retainedFontBudget: {
+          maxPaths: 128,
+          maxSourceBytes: 512 * 1024 * 1024,
+          pathCounts: allTransitions.map(
+            (transition) => transition.diagnostics.retainedFontPathCount,
+          ),
+          sourceByteCounts: allTransitions.map(
+            (transition) => transition.diagnostics.retainedFontBytes,
+          ),
+        },
         wasmHeapBytes: {
           min: Math.min(...warmedHeapSizes),
           max: Math.max(...warmedHeapSizes),
@@ -517,7 +591,27 @@ test.describe("dynamic font profile qualification", () => {
         targetFingerprint: invalidFingerprint,
         fonts: [{ filename, sha256: invalidSha256, data: invalidBytes }],
       });
-      return { valid, failed };
+      const recoveredConversion = await converter.convert(
+        new TextEncoder().encode(
+          "{\\rtf1\\ansi\\deff0 Recovered after quarantine}",
+        ),
+        { outputFormat: "pdf" },
+        "recovered-after-quarantine.rtf",
+      );
+      const recoveredProfile = await converter.setFontProfile({
+        schemaVersion: runtime.FONT_PROFILE_SCHEMA_VERSION,
+        transitionId: "fault-recovery-default",
+        expectedActiveFingerprint: runtime.EMPTY_FONT_PROFILE_FINGERPRINT,
+        targetFingerprint: runtime.EMPTY_FONT_PROFILE_FINGERPRINT,
+        fonts: [],
+      });
+      await converter.destroy();
+      return {
+        valid,
+        failed,
+        recoveredBytes: recoveredConversion.data.byteLength,
+        recoveredProfile,
+      };
     });
 
     expect(result.valid.ok).toBe(true);
@@ -527,8 +621,28 @@ test.describe("dynamic font profile qualification", () => {
     expect(result.failed.stateKnown).toBe(false);
     expect(result.failed.runtimeReusable).toBe(false);
     expect(result.failed.quarantine).toBe(true);
-    expect(workerCreateCount).toBe(1);
-    await expect.poll(() => workerCloseCount).toBe(1);
+    expect(result.recoveredBytes).toBeGreaterThan(0);
+    expect(result.recoveredProfile.ok).toBe(true);
+    expect(result.recoveredProfile.runtimeReusable).toBe(true);
+    expect(result.recoveredProfile.quarantine).toBe(false);
+    expect(result.recoveredProfile.identity.worker).not.toBe(
+      result.valid.identity.worker,
+    );
+    expect(result.recoveredProfile.identity.module).not.toBe(
+      result.valid.identity.module,
+    );
+    expect(result.recoveredProfile.identity.lok).not.toBe(
+      result.valid.identity.lok,
+    );
+    const recoveryNative = requireNativeDiagnostics(result.recoveredProfile);
+    expect(recoveryNative.activeFontCount).toBe(0);
+    for (const key of activeRegistryKeys)
+      expect(recoveryNative[key], key).toBe(0);
+    expect(recoveryNative.freetypeFontFileRecords).toBe(0);
+    expect(result.recoveredProfile.diagnostics.retainedFontPathCount).toBe(0);
+    expect(result.recoveredProfile.diagnostics.retainedFontBytes).toBe(0);
+    expect(workerCreateCount).toBe(2);
+    await expect.poll(() => workerCloseCount).toBe(2);
 
     const serverRequestResponse = await context.request.get(
       "http://localhost:3000/__test__/requests",
@@ -547,7 +661,7 @@ test.describe("dynamic font profile qualification", () => {
       ]),
     );
     for (const assetName of coreAssetNames)
-      expect(serverCoreRequestCounts[assetName], assetName).toBe(1);
+      expect(serverCoreRequestCounts[assetName], assetName).toBe(2);
 
     await writeFontProfileFaultQualificationEvidence(
       { name: browser.browserType().name(), version: browser.version() },
@@ -560,7 +674,19 @@ test.describe("dynamic font profile qualification", () => {
         quarantine: result.failed.quarantine,
         workerLifecycle: {
           created: workerCreateCount,
-          closedAfterQuarantine: workerCloseCount,
+          closedAfterDestroy: workerCloseCount,
+        },
+        quarantinedRuntimeIdentity: result.valid.identity,
+        recovery: {
+          conversionBytes: result.recoveredBytes,
+          freshRuntimeIdentity: result.recoveredProfile.identity,
+          differsFromQuarantinedRuntime:
+            JSON.stringify(result.recoveredProfile.identity) !==
+            JSON.stringify(result.valid.identity),
+          stateKnown: result.recoveredProfile.stateKnown,
+          runtimeReusable: result.recoveredProfile.runtimeReusable,
+          quarantine: result.recoveredProfile.quarantine,
+          nativeDiagnostics: recoveryNative,
         },
         serverCoreRequestCounts,
       },

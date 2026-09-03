@@ -1,0 +1,247 @@
+# Adds read-only native registry diagnostics for dynamic font-profile qualification.
+# FreeType file objects remain cache-owned; the ABI reports their bounded plateau instead of deleting them.
+diff --git a/desktop/source/lib/init.cxx b/desktop/source/lib/init.cxx
+index c39064c..e096bd1 100644
+--- a/desktop/source/lib/init.cxx
++++ b/desktop/source/lib/init.cxx
+@@ -3615,6 +3615,11 @@ struct NativeFontProfileResultData
+     bool mbRollbackSucceeded = false;
+     bool mbStateKnown = true;
+     bool mbRuntimeReusable = true;
++    bool mbRegistryCountsAvailable = false;
++    sal_Int32 mnPrintFontManagerRecords = -1;
++    sal_Int32 mnFontconfigApplicationPatterns = -1;
++    sal_Int32 mnFreetypeFontInfoRecords = -1;
++    sal_Int32 mnFreetypeFontFileRecords = -1;
+     OUString maMessage;
+ };
+ 
+@@ -4195,8 +4200,27 @@ sal_Int64 nativeFontProfileActiveBytes()
+     return static_cast<sal_Int64>(nBytes);
+ }
+ 
+-char* nativeFontProfileWriteResult(const NativeFontProfileResultData& rResult)
++void nativeFontProfileCaptureRegistryDiagnostics(NativeFontProfileResultData& rResult)
+ {
++    if (!gImpl)
++        return;
++
++    SolarMutexGuard aGuard;
++    OutputDevice* pDevice = Application::GetDefaultDevice();
++    if (!pDevice)
++        return;
++
++    rResult.mbRegistryCountsAvailable = pDevice->GetTempDevFontDiagnostics(
++        OString(NATIVE_FONT_PROFILE_ROOT.data(),
++                static_cast<sal_Int32>(NATIVE_FONT_PROFILE_ROOT.size())),
++        rResult.mnPrintFontManagerRecords,
++        rResult.mnFontconfigApplicationPatterns, rResult.mnFreetypeFontInfoRecords,
++        rResult.mnFreetypeFontFileRecords);
++}
++
++char* nativeFontProfileWriteResult(NativeFontProfileResultData& rResult)
++{
++    nativeFontProfileCaptureRegistryDiagnostics(rResult);
+     tools::JsonWriter aJSON;
+     aJSON.put("ok", rResult.mbOk);
+     aJSON.put("code", std::string_view(rResult.maCode));
+@@ -4222,6 +4246,12 @@ char* nativeFontProfileWriteResult(const NativeFontProfileResultData& rResult)
+         aJSON.put("activeFontCount",
+                   static_cast<sal_Int32>(gNativeFontProfileState.maEntries.size()));
+         aJSON.put("activeFontBytes", nativeFontProfileActiveBytes());
++        aJSON.put("registryCountsAvailable", rResult.mbRegistryCountsAvailable);
++        aJSON.put("printFontManagerRecords", rResult.mnPrintFontManagerRecords);
++        aJSON.put("fontconfigApplicationPatterns",
++                  rResult.mnFontconfigApplicationPatterns);
++        aJSON.put("freetypeFontInfoRecords", rResult.mnFreetypeFontInfoRecords);
++        aJSON.put("freetypeFontFileRecords", rResult.mnFreetypeFontFileRecords);
+         if (!rResult.maMessage.isEmpty())
+             aJSON.put("message", rResult.maMessage);
+     }
+diff --git a/include/vcl/outdev.hxx b/include/vcl/outdev.hxx
+index 418eafc..776f655 100644
+--- a/include/vcl/outdev.hxx
++++ b/include/vcl/outdev.hxx
+@@ -1147,6 +1147,12 @@ public:
+     bool                        RemoveTempDevFonts( const std::vector<OUString>& rFileURLs );
+     bool                        ReplaceTempDevFonts( const std::vector<OUString>& rRemovedURLs,
+                                                      const std::vector<OUString>& rAddedURLs );
++    bool                        GetTempDevFontDiagnostics(
++                                    const OString& rPathPrefix,
++                                    sal_Int32& rPrintFontManagerRecords,
++                                    sal_Int32& rFontconfigApplicationPatterns,
++                                    sal_Int32& rFreetypeFontInfoRecords,
++                                    sal_Int32& rFreetypeFontFileRecords ) const;
+     void                        RefreshFontData( const bool bNewFontLists );
+ 
+     FontMetric                  GetFontMetric() const;
+diff --git a/vcl/inc/unx/fontmanager.hxx b/vcl/inc/unx/fontmanager.hxx
+index 28ea866..f4f6abd 100644
+--- a/vcl/inc/unx/fontmanager.hxx
++++ b/vcl/inc/unx/fontmanager.hxx
+@@ -145,6 +145,10 @@ public:
+     bool removeFontFiles( const std::vector<OUString>& rFileUrls );
+     bool removeFontFile( std::u16string_view rFileUrl );
+ 
++    sal_Int32 countFontRecordsForPathPrefix(const OString& rPathPrefix) const;
++    static sal_Int32 countFontconfigApplicationFontsForPathPrefix(
++        const OString& rPathPrefix);
++
+     void initialize();
+ 
+     const PrintFont* getFont( fontID nID ) const
+diff --git a/vcl/inc/unx/glyphcache.hxx b/vcl/inc/unx/glyphcache.hxx
+index 2c10fe7..6886481 100644
+--- a/vcl/inc/unx/glyphcache.hxx
++++ b/vcl/inc/unx/glyphcache.hxx
+@@ -85,6 +85,9 @@ public:
+                                 const FontAttributes&);
+     void                    RemoveFontFile(sal_IntPtr nFontId);
+ 
++    sal_Int32               CountFontInfoRecordsForPathPrefix(const OString& rPathPrefix) const;
++    sal_Int32               CountFontFileRecordsForPathPrefix(const OString& rPathPrefix) const;
++
+     SAL_DLLPRIVATE void     AnnounceFonts( vcl::font::PhysicalFontCollection* ) const;
+ 
+     void                    ClearFontCache();
+diff --git a/vcl/source/outdev/font.cxx b/vcl/source/outdev/font.cxx
+index 6ced2b3..5decb25 100644
+--- a/vcl/source/outdev/font.cxx
++++ b/vcl/source/outdev/font.cxx
+@@ -49,6 +49,11 @@
+ #include <salgdi.hxx>
+ #include <svdata.hxx>
+ 
++#ifdef EMSCRIPTEN
++#include <unx/fontmanager.hxx>
++#include <unx/glyphcache.hxx>
++#endif
++
+ #include <unicode/uchar.h>
+ 
+ #include <strings.hrc>
+@@ -186,6 +191,35 @@ bool OutputDevice::ReplaceTempDevFonts(const std::vector<OUString>& rRemovedURLs
+     return bSuccess;
+ }
+ 
++bool OutputDevice::GetTempDevFontDiagnostics(
++    const OString& rPathPrefix, sal_Int32& rPrintFontManagerRecords,
++    sal_Int32& rFontconfigApplicationPatterns, sal_Int32& rFreetypeFontInfoRecords,
++    sal_Int32& rFreetypeFontFileRecords) const
++{
++#ifdef EMSCRIPTEN
++    psp::PrintFontManager& rPrintFontManager = psp::PrintFontManager::get();
++    FreetypeManager& rFreetypeManager = FreetypeManager::get();
++    rPrintFontManagerRecords
++        = rPrintFontManager.countFontRecordsForPathPrefix(rPathPrefix);
++    rFontconfigApplicationPatterns
++        = psp::PrintFontManager::countFontconfigApplicationFontsForPathPrefix(rPathPrefix);
++    if (rFontconfigApplicationPatterns < 0)
++        return false;
++    rFreetypeFontInfoRecords
++        = rFreetypeManager.CountFontInfoRecordsForPathPrefix(rPathPrefix);
++    rFreetypeFontFileRecords
++        = rFreetypeManager.CountFontFileRecordsForPathPrefix(rPathPrefix);
++    return true;
++#else
++    (void)rPathPrefix;
++    rPrintFontManagerRecords = -1;
++    rFontconfigApplicationPatterns = -1;
++    rFreetypeFontInfoRecords = -1;
++    rFreetypeFontFileRecords = -1;
++    return false;
++#endif
++}
++
+ bool OutputDevice::GetFontFeatures(std::vector<vcl::font::Feature>& rFontFeatures) const
+ {
+     if (!ImplNewFont())
+diff --git a/vcl/unx/generic/fontmanager/fontconfig.cxx b/vcl/unx/generic/fontmanager/fontconfig.cxx
+index f165c7a..f300e14 100644
+--- a/vcl/unx/generic/fontmanager/fontconfig.cxx
++++ b/vcl/unx/generic/fontmanager/fontconfig.cxx
+@@ -826,6 +826,30 @@ bool PrintFontManager::removeFontconfigFiles(const std::vector<OString>& rFiles)
+     return bSuccess;
+ }
+ 
++sal_Int32 PrintFontManager::countFontconfigApplicationFontsForPathPrefix(
++    const OString& rPathPrefix)
++{
++    FcConfig* pConfig = FcConfigGetCurrent();
++    if (!pConfig)
++        return -1;
++
++    FcFontSet* pFonts = FcConfigGetFonts(pConfig, FcSetApplication);
++    if (!pFonts)
++        return -1;
++
++    sal_Int32 nCount = 0;
++    for (int i = 0; i < pFonts->nfont; ++i)
++    {
++        FcChar8* pFile = nullptr;
++        if (FcPatternGetString(pFonts->fonts[i], FC_FILE, 0, &pFile) == FcResultMatch && pFile
++            && OString(reinterpret_cast<char*>(pFile)).startsWith(rPathPrefix))
++        {
++            ++nCount;
++        }
++    }
++    return nCount;
++}
++
+ static void addtopattern(FcPattern *pPattern,
+     FontItalic eItalic, FontWeight eWeight, FontWidth eWidth, FontPitch ePitch)
+ {
+diff --git a/vcl/unx/generic/fontmanager/fontmanager.cxx b/vcl/unx/generic/fontmanager/fontmanager.cxx
+index 8d854e3..2730d81 100644
+--- a/vcl/unx/generic/fontmanager/fontmanager.cxx
++++ b/vcl/unx/generic/fontmanager/fontmanager.cxx
+@@ -210,6 +210,14 @@ bool PrintFontManager::removeFontFile(std::u16string_view rFileUrl)
+     return removeFontFiles({ OUString(rFileUrl.data(), rFileUrl.size()) });
+ }
+ 
++sal_Int32 PrintFontManager::countFontRecordsForPathPrefix(const OString& rPathPrefix) const
++{
++    return static_cast<sal_Int32>(std::count_if(
++        m_aFonts.begin(), m_aFonts.end(), [&rPathPrefix, this](const auto& rEntry) {
++            return getFontFile(rEntry.second).startsWith(rPathPrefix);
++        }));
++}
++
+ std::vector<PrintFontManager::PrintFont> PrintFontManager::analyzeFontFile( int nDirID, const OString& rFontFile) const
+ {
+     std::vector<PrintFontManager::PrintFont> aNewFonts;
+diff --git a/vcl/unx/generic/glyphs/freetype_glyphcache.cxx b/vcl/unx/generic/glyphs/freetype_glyphcache.cxx
+index 0df12c2..52850a6 100644
+--- a/vcl/unx/generic/glyphs/freetype_glyphcache.cxx
++++ b/vcl/unx/generic/glyphs/freetype_glyphcache.cxx
+@@ -19,6 +19,7 @@
+ 
+ #include <sal/config.h>
+ 
++#include <algorithm>
+ #include <o3tl/safeint.hxx>
+ #include <utility>
+ #include <vcl/fontcharmap.hxx>
+@@ -293,6 +294,22 @@ void FreetypeManager::RemoveFontFile(sal_IntPtr nFontId)
+         m_aFontInfoList.erase(it);
+ }
+ 
++sal_Int32 FreetypeManager::CountFontInfoRecordsForPathPrefix(const OString& rPathPrefix) const
++{
++    return static_cast<sal_Int32>(std::count_if(
++        m_aFontInfoList.begin(), m_aFontInfoList.end(), [&rPathPrefix](const auto& rEntry) {
++            return rEntry.second->GetFontFileName().startsWith(rPathPrefix);
++        }));
++}
++
++sal_Int32 FreetypeManager::CountFontFileRecordsForPathPrefix(const OString& rPathPrefix) const
++{
++    return static_cast<sal_Int32>(std::count_if(
++        m_aFontFileList.begin(), m_aFontFileList.end(), [&rPathPrefix](const auto& rEntry) {
++            return rEntry.second->GetFileName().startsWith(rPathPrefix);
++        }));
++}
++
+ void FreetypeManager::AnnounceFonts( vcl::font::PhysicalFontCollection* pToAdd ) const
+ {
+     for (auto const& font : m_aFontInfoList)

@@ -359,8 +359,10 @@ export interface FontProfileDiagnostics {
   retiredFontCount: number;
   cleanupDebtPaths: string[];
   profileFileCount?: number;
+  retainedFontPathCount?: number;
+  retainedFontBytes?: number;
   wasmHeapBytes?: number;
-  native?: Record<string, unknown>;
+  native?: NativeFontProfileDiagnostics;
   messages: string[];
 }
 
@@ -402,6 +404,17 @@ export interface NativeFontProfileRequest {
   removed: NativeFontProfileManifestEntry[];
 }
 
+export interface NativeFontProfileDiagnostics {
+  activeFontCount: number;
+  activeFontBytes: number;
+  registryCountsAvailable: boolean;
+  printFontManagerRecords: number;
+  fontconfigApplicationPatterns: number;
+  freetypeFontInfoRecords: number;
+  freetypeFontFileRecords: number;
+  message?: string;
+}
+
 export interface NativeFontProfileResult {
   ok: boolean;
   code?: string;
@@ -413,7 +426,7 @@ export interface NativeFontProfileResult {
   rollback?: Partial<FontProfileRollbackDisposition>;
   stateKnown?: boolean;
   runtimeReusable?: boolean;
-  diagnostics?: Record<string, unknown>;
+  diagnostics?: NativeFontProfileDiagnostics;
 }
 
 /** Required browser runtime files for the no-pthread profile. */

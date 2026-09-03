@@ -15,6 +15,7 @@ import {
   type FontProfileRequest,
   type FontProfileResult,
   type FontProfileRuntimeIdentity,
+  type NativeFontProfileDiagnostics,
   type NativeFontProfileManifestEntry,
   type WasmLoadPhase,
   type WasmLoadProgress,
@@ -457,10 +458,13 @@ const FONT_PROFILE_ROOT = '/tmp/font-profiles/sha256';
 const FONT_PROFILE_EXTENSIONS = new Set(['otf', 'ttc', 'tte', 'ttf']);
 const FONT_PROFILE_MAX_FONTS = 128;
 const FONT_PROFILE_MAX_BYTES = 512 * 1024 * 1024;
+const FONT_PROFILE_MAX_RETAINED_FONTS = 128;
+const FONT_PROFILE_MAX_RETAINED_BYTES = 512 * 1024 * 1024;
 const workerIdentity = `worker:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
 let moduleGeneration = 0;
 let activeFontFingerprint: string = EMPTY_FONT_PROFILE_FINGERPRINT;
 let activeFonts = new Map<string, ActiveFontRecord>();
+const retainedNativeFonts = new Map<string, number>();
 let dynamicFontProfileStateKnown = true;
 const fontCleanupDebt = new Set<string>();
 let nativeOperationTail: Promise<void> = Promise.resolve();
@@ -478,7 +482,7 @@ function createFontProfileDiagnostics(
   retiredFontCount = 0,
   cleanupDebtPaths: string[] = [],
   messages: string[] = [],
-  native?: Record<string, unknown>
+  native?: NativeFontProfileDiagnostics
 ): FontProfileDiagnostics {
   return {
     activeFontCount: activeFonts.size,
@@ -487,6 +491,11 @@ function createFontProfileDiagnostics(
     retiredFontCount,
     cleanupDebtPaths,
     profileFileCount: countFontProfileFiles(),
+    retainedFontPathCount: retainedNativeFonts.size,
+    retainedFontBytes: [...retainedNativeFonts.values()].reduce(
+      (total, byteLength) => total + byteLength,
+      0
+    ),
     wasmHeapBytes: module?.HEAPU8?.buffer.byteLength,
     native,
     messages,
@@ -2711,6 +2720,25 @@ async function handleSetFontProfile(msg: WorkerMessage) {
       fontBytes.set(sha256, data);
     }
 
+    const newRetainedFonts = targetEntries.filter(
+      (entry) => !retainedNativeFonts.has(entry.path)
+    );
+    const projectedRetainedFontCount = retainedNativeFonts.size + newRetainedFonts.length;
+    const projectedRetainedFontBytes = [...retainedNativeFonts.values()].reduce(
+      (total, byteLength) => total + byteLength,
+      0
+    ) + newRetainedFonts.reduce((total, entry) => total + entry.byteLength, 0);
+    if (projectedRetainedFontCount > FONT_PROFILE_MAX_RETAINED_FONTS) {
+      throw new Error(
+        `Worker retained-font capacity exceeds ${FONT_PROFILE_MAX_RETAINED_FONTS} unique paths`
+      );
+    }
+    if (projectedRetainedFontBytes > FONT_PROFILE_MAX_RETAINED_BYTES) {
+      throw new Error(
+        `Worker retained-font capacity exceeds ${FONT_PROFILE_MAX_RETAINED_BYTES} source bytes`
+      );
+    }
+
     const authoritativeTarget = await calculateProfileFingerprint(targetEntries);
     if (authoritativeTarget !== profile.targetFingerprint.toLowerCase()) {
       throw new Error('Target fingerprint does not match the complete Worker-computed manifest');
@@ -2798,6 +2826,10 @@ async function handleSetFontProfile(msg: WorkerMessage) {
         ),
       });
       return;
+    }
+
+    if (nativeResult.mutation?.attempted ?? true) {
+      for (const entry of added) retainedNativeFonts.set(entry.path, entry.byteLength);
     }
 
     const reportedRuntimeReusable = nativeResult.runtimeReusable ?? nativeResult.ok;
@@ -2919,6 +2951,7 @@ function handleDestroy(msg: WorkerMessage) {
   module = null;
   initialized = false;
   activeFonts = new Map();
+  retainedNativeFonts.clear();
   activeFontFingerprint = EMPTY_FONT_PROFILE_FINGERPRINT;
   dynamicFontProfileStateKnown = true;
   postResponse({ type: 'ready', id: msg.id });

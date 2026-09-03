@@ -29,6 +29,17 @@ const qualificationSourceFiles = {
     "workflows",
     "build-wasm.yml",
   ),
+  "build/autogen.input": path.join(repositoryRoot, "build", "autogen.input"),
+  "build/build-wasm.sh": path.join(repositoryRoot, "build", "build-wasm.sh"),
+  "build/patch-stack.sh": path.join(repositoryRoot, "build", "patch-stack.sh"),
+  "dev-server.mjs": path.join(repositoryRoot, "dev-server.mjs"),
+  "package-lock.json": path.join(repositoryRoot, "package-lock.json"),
+  "playwright.config.ts": path.join(repositoryRoot, "playwright.config.ts"),
+  "scripts/inspect-no-pthread-runtime.mjs": path.join(
+    repositoryRoot,
+    "scripts",
+    "inspect-no-pthread-runtime.mjs",
+  ),
   "tests/browser/font-profile-lifecycle.spec.ts": path.join(
     repositoryRoot,
     "tests",
@@ -45,6 +56,7 @@ const qualificationSourceFiles = {
     "browser.worker.ts",
   ),
   "src/lok-bindings.ts": path.join(repositoryRoot, "src", "lok-bindings.ts"),
+  "src/types.ts": path.join(repositoryRoot, "src", "types.ts"),
   "build/patches/wasm-font-removal-primitives.patch": path.join(
     repositoryRoot,
     "build",
@@ -56,6 +68,12 @@ const qualificationSourceFiles = {
     "build",
     "patches",
     "wasm-font-profile-abi.patch",
+  ),
+  "build/patches/wasm-font-profile-diagnostics.patch": path.join(
+    repositoryRoot,
+    "build",
+    "patches",
+    "wasm-font-profile-diagnostics.patch",
   ),
 } as const;
 
@@ -105,6 +123,7 @@ async function writeEvidence(
         nativeBuildRunId,
         nativeCommit,
         wrapperCommit: qualificationCommit,
+        buildMode: process.env.QUALIFICATION_BUILD_MODE ?? "local",
         browser,
         runtimeAssetSha256,
         qualificationSourceSha256,

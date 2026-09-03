@@ -184,6 +184,7 @@ NATIVE_BRIDGE_PATCH="${SCRIPT_DIR}/patches/wasm-native-conversion-bridge.patch"
 NO_PTHREAD_PATCH="${SCRIPT_DIR}/patches/wasm-no-pthread-single-profile.patch"
 FONT_REMOVAL_PATCH="${SCRIPT_DIR}/patches/wasm-font-removal-primitives.patch"
 FONT_PROFILE_ABI_PATCH="${SCRIPT_DIR}/patches/wasm-font-profile-abi.patch"
+FONT_PROFILE_DIAGNOSTICS_PATCH="${SCRIPT_DIR}/patches/wasm-font-profile-diagnostics.patch"
 ACTIVE_PATCHES=(
     "$CONSOLIDATED_PATCH"
     "$CONVERSION_EXPORTS_PATCH"
@@ -192,12 +193,16 @@ ACTIVE_PATCHES=(
     "$NO_PTHREAD_PATCH"
     "$FONT_REMOVAL_PATCH"
     "$FONT_PROFILE_ABI_PATCH"
+    "$FONT_PROFILE_DIAGNOSTICS_PATCH"
 )
 
 # Clean if requested. A clean build also implies source normalization below.
 if [ "$CLEAN_BUILD" = "1" ]; then
     log_warn "Cleaning previous build..."
-    make clean 2>/dev/null || true
+    if [ -f Makefile ]; then
+        make clean
+    fi
+    rm -rf workdir instdir
 fi
 
 # Cached build outputs are intentionally preserved, but tracked source must be
@@ -301,6 +306,9 @@ apply_reviewed_patch \
 apply_reviewed_patch \
     "wasm-font-profile-abi.patch" \
     "$FONT_PROFILE_ABI_PATCH"
+apply_reviewed_patch \
+    "wasm-font-profile-diagnostics.patch" \
+    "$FONT_PROFILE_DIAGNOSTICS_PATCH"
 
 EMSCRIPTEN_PLATFORM_FILE="${LO_DIR}/solenv/gbuild/platform/EMSCRIPTEN_INTEL_GCC.mk"
 if ! grep -Fqx 'gb_CXXFLAGS := $(filter-out -pthread,$(gb_CXXFLAGS))' \

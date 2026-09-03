@@ -37,6 +37,7 @@ export type {
   FontProfileRuntimeIdentity,
   FontProfileStage,
   IFontProfileConverter,
+  NativeFontProfileDiagnostics,
   NativeFontProfileManifestEntry,
   NativeFontProfileRequest,
   NativeFontProfileResult,

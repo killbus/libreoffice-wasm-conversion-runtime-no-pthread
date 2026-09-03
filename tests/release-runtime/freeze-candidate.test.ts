@@ -3,6 +3,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   writeFile,
   truncate,
 } from "node:fs/promises";
@@ -15,6 +16,7 @@ import {
   freezeCandidate,
 } from "../../scripts/release-runtime/freeze-candidate.mjs";
 import { deriveCandidateIdentity } from "../../scripts/release-runtime/lib/canonical.mjs";
+import { createDeterministicZip } from "../../scripts/release-runtime/lib/zip-writer.mjs";
 
 const COMMIT_A = "a".repeat(40);
 const COMMIT_B = "b".repeat(40);
@@ -26,13 +28,22 @@ const repositoryRoot = join(
 );
 const qualificationSourcePaths = [
   ".github/workflows/build-wasm.yml",
+  "build/autogen.input",
+  "build/build-wasm.sh",
+  "build/patch-stack.sh",
+  "dev-server.mjs",
+  "package-lock.json",
+  "playwright.config.ts",
+  "scripts/inspect-no-pthread-runtime.mjs",
   "tests/browser/font-profile-lifecycle.spec.ts",
   "tests/release-runtime/helpers/font-profile-evidence.ts",
   "src/browser.ts",
   "src/browser.worker.ts",
   "src/lok-bindings.ts",
+  "src/types.ts",
   "build/patches/wasm-font-removal-primitives.patch",
   "build/patches/wasm-font-profile-abi.patch",
+  "build/patches/wasm-font-profile-diagnostics.patch",
 ];
 
 async function sha256File(filePath: string) {
@@ -55,6 +66,21 @@ async function hashFileMap(files: Record<string, string>) {
 async function sparseFile(path: string, bytes: number) {
   await writeFile(path, Buffer.from([1]));
   await truncate(path, bytes);
+}
+
+function nativeRegistrySnapshot(
+  active: boolean,
+  freetypeFontFileRecords: number,
+) {
+  return {
+    activeFontCount: active ? 1 : 0,
+    activeFontBytes: active ? 1024 : 0,
+    registryCountsAvailable: true,
+    printFontManagerRecords: active ? 1 : 0,
+    fontconfigApplicationPatterns: active ? 1 : 0,
+    freetypeFontInfoRecords: active ? 1 : 0,
+    freetypeFontFileRecords,
+  };
 }
 
 async function fixture() {
@@ -111,6 +137,7 @@ async function fixture() {
       wrapperCommit: COMMIT_B,
       ...environment,
       dynamicFontProfiles: 1,
+      buildMode: "fresh-clean",
       cacheDisabled: true,
       coreAssetsServedWithNoStore: true,
       serviceWorkersBypassed: true,
@@ -129,11 +156,40 @@ async function fixture() {
       },
       workerLifecycle: { created: 1, closedAfterDestroy: 1 },
       runtimeIdentity: { worker: "worker:1", module: "module:1", lok: "lok:1" },
+      runtimeIdentities: Array.from({ length: 24 }, () => ({
+        worker: "worker:1",
+        module: "module:1",
+        lok: "lok:1",
+      })),
       stableRuntimeIdentity: true,
       cleanupDebtFree: true,
       profileFileCounts: Array.from({ length: 20 }, (_, index) =>
         index % 2 === 0 ? 1 : 0,
       ),
+      nativeRegistryDiagnostics: {
+        maxRetainedFontFiles: 3,
+        transitions: [
+          ...Array.from({ length: 20 }, (_, index) =>
+            nativeRegistrySnapshot(index % 2 === 0, 1),
+          ),
+          nativeRegistrySnapshot(true, 2),
+          nativeRegistrySnapshot(true, 3),
+          nativeRegistrySnapshot(true, 3),
+          nativeRegistrySnapshot(false, 3),
+        ],
+      },
+      retainedFontBudget: {
+        maxPaths: 128,
+        maxSourceBytes: 512 * 1024 * 1024,
+        pathCounts: [...Array.from({ length: 20 }, () => 1), 2, 3, 3, 3],
+        sourceByteCounts: [
+          ...Array.from({ length: 20 }, () => 1024),
+          2048,
+          3072,
+          3072,
+          3072,
+        ],
+      },
       wasmHeapBytes: {
         min: 128 * 1024 * 1024,
         max: 160 * 1024 * 1024,
@@ -166,23 +222,48 @@ async function fixture() {
       nativeCommit: COMMIT_A,
       wrapperCommit: COMMIT_B,
       ...environment,
+      buildMode: "fresh-clean",
       fault: "malformed-sfnt-after-valid-profile",
       mutationAttempted: true,
       mutationCommitted: false,
       stateKnown: false,
       runtimeReusable: false,
       quarantine: true,
-      workerLifecycle: { created: 1, closedAfterQuarantine: 1 },
+      workerLifecycle: { created: 2, closedAfterDestroy: 2 },
+      quarantinedRuntimeIdentity: {
+        worker: "worker:1",
+        module: "module:1",
+        lok: "lok:1",
+      },
+      recovery: {
+        conversionBytes: 1024,
+        freshRuntimeIdentity: {
+          worker: "worker:2",
+          module: "module:2",
+          lok: "lok:2",
+        },
+        differsFromQuarantinedRuntime: true,
+        stateKnown: true,
+        runtimeReusable: true,
+        quarantine: false,
+        nativeDiagnostics: nativeRegistrySnapshot(false, 0),
+      },
       serverCoreRequestCounts: {
-        "browser.worker.global.js": 1,
-        "soffice.js": 1,
-        "soffice.wasm": 1,
-        "soffice.data": 1,
+        "browser.worker.global.js": 2,
+        "soffice.js": 2,
+        "soffice.wasm": 2,
+        "soffice.data": 2,
       },
     }),
   );
   const nativeArchive = join(root, `soffice-wasm-no-pthread-${RUN_ID}.zip`);
-  await writeFile(nativeArchive, "archive bytes");
+  const nativeEntries = await Promise.all(
+    (await readdir(nativeRoot)).sort().map(async (name) => ({
+      path: name,
+      bytes: await readFile(join(nativeRoot, name)),
+    })),
+  );
+  await writeFile(nativeArchive, createDeterministicZip(nativeEntries));
   return { root, nativeRoot, wrapperRoot, nativeArchive };
 }
 
@@ -227,6 +308,23 @@ describe("successor candidate freezing", () => {
     ).rejects.toThrow(FreezeCandidateError);
   });
 
+  it("rejects an extracted native root that differs from the downloaded archive", async () => {
+    const paths = await fixture();
+    await writeFile(
+      join(paths.nativeRoot, "soffice.data.js.metadata"),
+      "{\n}\n",
+    );
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/native archive entry does not match extracted file/);
+  });
+
   it("rejects artifacts without matching font-profile qualification evidence", async () => {
     const paths = await fixture();
     await writeFile(
@@ -264,6 +362,26 @@ describe("successor candidate freezing", () => {
     ).rejects.toThrow(/qualification evidence/);
   });
 
+  it("rejects self-asserted stable identity when raw identities differ", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.runtimeIdentities[7].module = "module:other";
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/qualification evidence/);
+  });
+
   it("rejects qualification evidence with repeated core requests", async () => {
     const paths = await fixture();
     const evidencePath = join(
@@ -282,6 +400,107 @@ describe("successor candidate freezing", () => {
         runId: RUN_ID,
       }),
     ).rejects.toThrow(/qualification evidence/);
+  });
+
+  it("rejects qualification evidence with residual active native registries", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.nativeRegistryDiagnostics.transitions[1].freetypeFontInfoRecords = 1;
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/active registries/);
+  });
+
+  it("rejects qualification evidence that exceeds the retained-font budget", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.retainedFontBudget.pathCounts[22] = 129;
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/retained-font budget/);
+  });
+
+  it("rejects qualification evidence with an unbounded FreeType file cache", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.nativeRegistryDiagnostics.transitions[22].freetypeFontFileRecords = 4;
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/registry diagnostics/);
+  });
+
+  it("rejects fault recovery that reuses the quarantined runtime identity", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-fault-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.recovery.freshRuntimeIdentity =
+      evidence.quarantinedRuntimeIdentity;
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/fault evidence/);
+  });
+
+  it("rejects fault evidence without a clean fresh-runtime recovery", async () => {
+    const paths = await fixture();
+    const evidencePath = join(
+      paths.nativeRoot,
+      "font-profile-fault-qualification.json",
+    );
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+    evidence.recovery.nativeDiagnostics.printFontManagerRecords = 1;
+    await writeFile(evidencePath, JSON.stringify(evidence));
+
+    await expect(
+      freezeCandidate({
+        ...paths,
+        nativeCommit: COMMIT_A,
+        wrapperCommit: COMMIT_B,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/fault evidence/);
   });
 
   it("rejects qualification evidence with unstable heap growth", async () => {
