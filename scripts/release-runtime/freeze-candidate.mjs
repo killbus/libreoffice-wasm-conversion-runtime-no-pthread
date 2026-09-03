@@ -79,6 +79,23 @@ const QUALIFICATION_SOURCE_FILES = new Map([
 ]);
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
+function isScopedRuntimeIdentity(identity) {
+  if (
+    typeof identity?.worker !== "string" ||
+    typeof identity?.module !== "string" ||
+    typeof identity?.lok !== "string"
+  ) {
+    return false;
+  }
+  const modulePrefix = `${identity.worker}:module:`;
+  if (!identity.module.startsWith(modulePrefix)) return false;
+  const moduleGeneration = identity.module.slice(modulePrefix.length);
+  if (!/^[1-9]\d*$/.test(moduleGeneration)) return false;
+  const lokPrefix = `${identity.module}:lok:`;
+  if (!identity.lok.startsWith(lokPrefix)) return false;
+  return /^[1-9]\d*:ptr:[1-9]\d*$/.test(identity.lok.slice(lokPrefix.length));
+}
+
 const ASSET_LAYOUT = [
   {
     path: "dist/browser.d.ts",
@@ -491,8 +508,10 @@ async function validateNativeRoot(nativeRoot, expected) {
     !Array.isArray(qualification?.runtimeIdentities) ||
     qualification.runtimeIdentities.length !==
       qualification.profileCycles * 2 + 4 ||
+    !isScopedRuntimeIdentity(qualification?.runtimeIdentity) ||
     !qualification.runtimeIdentities.every(
       (identity) =>
+        isScopedRuntimeIdentity(identity) &&
         identity?.worker === qualification.runtimeIdentity?.worker &&
         identity?.module === qualification.runtimeIdentity?.module &&
         identity?.lok === qualification.runtimeIdentity?.lok,
@@ -500,9 +519,6 @@ async function validateNativeRoot(nativeRoot, expected) {
     qualification?.cleanupDebtFree !== true ||
     qualification?.workerLifecycle?.created !== 1 ||
     qualification?.workerLifecycle?.closedAfterDestroy !== 1 ||
-    typeof qualification?.runtimeIdentity?.worker !== "string" ||
-    typeof qualification?.runtimeIdentity?.module !== "string" ||
-    typeof qualification?.runtimeIdentity?.lok !== "string" ||
     !Number.isFinite(qualification?.wasmHeapBytes?.min) ||
     !Number.isFinite(qualification?.wasmHeapBytes?.max) ||
     !Number.isFinite(qualification?.wasmHeapBytes?.range) ||
@@ -580,18 +596,11 @@ async function validateNativeRoot(nativeRoot, expected) {
     faultQualification?.quarantine !== true ||
     faultQualification?.workerLifecycle?.created !== 2 ||
     faultQualification?.workerLifecycle?.closedAfterDestroy !== 2 ||
-    typeof faultQualification?.quarantinedRuntimeIdentity?.worker !==
-      "string" ||
-    typeof faultQualification?.quarantinedRuntimeIdentity?.module !==
-      "string" ||
-    typeof faultQualification?.quarantinedRuntimeIdentity?.lok !== "string" ||
+    !isScopedRuntimeIdentity(faultQualification?.quarantinedRuntimeIdentity) ||
     !(faultQualification?.recovery?.conversionBytes > 0) ||
-    typeof faultQualification?.recovery?.freshRuntimeIdentity?.worker !==
-      "string" ||
-    typeof faultQualification?.recovery?.freshRuntimeIdentity?.module !==
-      "string" ||
-    typeof faultQualification?.recovery?.freshRuntimeIdentity?.lok !==
-      "string" ||
+    !isScopedRuntimeIdentity(
+      faultQualification?.recovery?.freshRuntimeIdentity,
+    ) ||
     faultQualification?.recovery?.differsFromQuarantinedRuntime !== true ||
     ["worker", "module", "lok"].some(
       (field) =>

@@ -155,11 +155,15 @@ async function fixture() {
         "soffice.data": 1,
       },
       workerLifecycle: { created: 1, closedAfterDestroy: 1 },
-      runtimeIdentity: { worker: "worker:1", module: "module:1", lok: "lok:1" },
+      runtimeIdentity: {
+        worker: "worker:1",
+        module: "worker:1:module:1",
+        lok: "worker:1:module:1:lok:1:ptr:4096",
+      },
       runtimeIdentities: Array.from({ length: 24 }, () => ({
         worker: "worker:1",
-        module: "module:1",
-        lok: "lok:1",
+        module: "worker:1:module:1",
+        lok: "worker:1:module:1:lok:1:ptr:4096",
       })),
       stableRuntimeIdentity: true,
       cleanupDebtFree: true,
@@ -232,15 +236,15 @@ async function fixture() {
       workerLifecycle: { created: 2, closedAfterDestroy: 2 },
       quarantinedRuntimeIdentity: {
         worker: "worker:1",
-        module: "module:1",
-        lok: "lok:1",
+        module: "worker:1:module:1",
+        lok: "worker:1:module:1:lok:1:ptr:4096",
       },
       recovery: {
         conversionBytes: 1024,
         freshRuntimeIdentity: {
           worker: "worker:2",
-          module: "module:2",
-          lok: "lok:2",
+          module: "worker:2:module:1",
+          lok: "worker:2:module:1:lok:1:ptr:4096",
         },
         differsFromQuarantinedRuntime: true,
         stateKnown: true,

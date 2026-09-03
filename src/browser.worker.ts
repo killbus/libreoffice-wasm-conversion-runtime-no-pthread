@@ -462,6 +462,7 @@ const FONT_PROFILE_MAX_RETAINED_FONTS = 128;
 const FONT_PROFILE_MAX_RETAINED_BYTES = 512 * 1024 * 1024;
 const workerIdentity = `worker:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
 let moduleGeneration = 0;
+let lokGeneration = 0;
 let activeFontFingerprint: string = EMPTY_FONT_PROFILE_FINGERPRINT;
 let activeFonts = new Map<string, ActiveFontRecord>();
 const retainedNativeFonts = new Map<string, number>();
@@ -474,7 +475,9 @@ function getRuntimeIdentity(): FontProfileRuntimeIdentity {
   return {
     worker: workerIdentity,
     module: moduleIdentity,
-    lok: `${moduleIdentity}:${lokBindings?.getIdentity() ?? 'lok:uninitialized'}`,
+    lok: lokBindings
+      ? `${moduleIdentity}:lok:${lokGeneration}:ptr:${lokBindings.getIdentity().slice(4)}`
+      : `${moduleIdentity}:lok:uninitialized`,
   };
 }
 
@@ -888,6 +891,7 @@ async function handleInit(msg: WorkerMessage) {
     if (!lokBindings) {
       throw new Error('Failed to get LOK bindings from converter');
     }
+    lokGeneration += 1;
 
     initialized = true;
     emitPhaseProgress('ready', 'Ready');
@@ -2754,16 +2758,6 @@ async function handleSetFontProfile(msg: WorkerMessage) {
     return;
   }
 
-  if (profile.targetFingerprint.toLowerCase() === activeFontFingerprint) {
-    fail({
-      ok: true,
-      code: 'OK',
-      appliedFingerprint: activeFontFingerprint,
-      mutation: { attempted: false, committed: true, stage: 'commit' },
-    });
-    return;
-  }
-
   try {
     closeCachedDocumentStrict();
   } catch (error) {
@@ -2890,7 +2884,11 @@ async function handleSetFontProfile(msg: WorkerMessage) {
         appliedFingerprint: activeFontFingerprint,
         addedCount: nativeResult.addedCount ?? added.length,
         removedCount: nativeResult.removedCount ?? removed.length,
-        mutation: { attempted: true, committed: true, stage: 'commit' },
+        mutation: {
+          attempted: nativeResult.mutation?.attempted ?? true,
+          committed: nativeResult.mutation?.committed ?? true,
+          stage: nativeResult.stage ?? nativeResult.mutation?.stage ?? 'commit',
+        },
         rollback: { attempted: false, succeeded: null },
         stateKnown: true,
         runtimeReusable: true,

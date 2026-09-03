@@ -222,8 +222,8 @@ describe('browser dynamic font profile runtime', () => {
     expect(source).toContain('nativeOperationTail.then(() => dispatchMessage(msg))');
     expect(source).toContain('lokBindings.setFontProfile({');
     expect(source.indexOf('if (!lokBindings?.supportsFontProfile())')).toBeGreaterThan(-1);
-    expect(source.indexOf('if (!lokBindings?.supportsFontProfile())')).toBeLessThan(
-      source.indexOf('if (profile.targetFingerprint.toLowerCase() === activeFontFingerprint)')
+    expect(source).not.toContain(
+      'if (profile.targetFingerprint.toLowerCase() === activeFontFingerprint)'
     );
   });
 });

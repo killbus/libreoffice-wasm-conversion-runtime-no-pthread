@@ -621,6 +621,7 @@ test.describe("dynamic font profile qualification", () => {
     expect(result.failed.stateKnown).toBe(false);
     expect(result.failed.runtimeReusable).toBe(false);
     expect(result.failed.quarantine).toBe(true);
+    expect(result.failed.identity).toEqual(result.valid.identity);
     expect(result.recoveredBytes).toBeGreaterThan(0);
     expect(result.recoveredProfile.ok).toBe(true);
     expect(result.recoveredProfile.runtimeReusable).toBe(true);
@@ -676,13 +677,13 @@ test.describe("dynamic font profile qualification", () => {
           created: workerCreateCount,
           closedAfterDestroy: workerCloseCount,
         },
-        quarantinedRuntimeIdentity: result.valid.identity,
+        quarantinedRuntimeIdentity: result.failed.identity,
         recovery: {
           conversionBytes: result.recoveredBytes,
           freshRuntimeIdentity: result.recoveredProfile.identity,
           differsFromQuarantinedRuntime:
             JSON.stringify(result.recoveredProfile.identity) !==
-            JSON.stringify(result.valid.identity),
+            JSON.stringify(result.failed.identity),
           stateKnown: result.recoveredProfile.stateKnown,
           runtimeReusable: result.recoveredProfile.runtimeReusable,
           quarantine: result.recoveredProfile.quarantine,

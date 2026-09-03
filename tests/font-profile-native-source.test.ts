@@ -142,7 +142,15 @@ describe('native font profile source contract', () => {
       'const moduleIdentity = `${workerIdentity}:module:${moduleGeneration}`;'
     );
     expect(workerSource).toContain(
-      "lok: `${moduleIdentity}:${lokBindings?.getIdentity() ?? 'lok:uninitialized'}`"
+      '`${moduleIdentity}:lok:${lokGeneration}:ptr:${lokBindings.getIdentity().slice(4)}`'
     );
+    expect(workerSource).toContain('lokGeneration += 1;');
+  });
+
+  it('uses the native bridge for no-op profiles so diagnostics remain authoritative', () => {
+    expect(workerSource).not.toContain(
+      'if (profile.targetFingerprint.toLowerCase() === activeFontFingerprint)'
+    );
+    expect(workerSource).toContain('attempted: nativeResult.mutation?.attempted ?? true');
   });
 });
