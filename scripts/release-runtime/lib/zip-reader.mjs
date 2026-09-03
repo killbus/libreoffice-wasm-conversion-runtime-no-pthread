@@ -3,8 +3,9 @@
 // The verifier inspects the full central directory BEFORE extracting anything
 // and rejects: absolute / drive-qualified paths, `..` traversal, backslash /
 // null-byte separators, duplicate normalized names, case-fold collisions,
-// non-regular-file entries, encrypted entries, data-descriptor entries, and
-// unsupported compression methods. Extraction then happens into a fresh
+// non-regular-file entries, encrypted entries, and unsupported compression
+// methods. Data-descriptor entries use sizes and CRCs from the validated central
+// directory. Extraction then happens into a fresh
 // boundary-checked root with CRC validation on every written file.
 
 import { inflateRawSync } from 'node:zlib'
@@ -141,9 +142,6 @@ function validateEntryPolicy(entry) {
   if (flags & 0x0001) {
     throw new ZipReadError(`encrypted entry is not allowed: ${name}`)
   }
-  if (flags & 0x0008) {
-    throw new ZipReadError(`data-descriptor entry is not allowed: ${name}`)
-  }
   if (UNSUPPORTED_METHODS.has(method)) {
     throw new ZipReadError(`unsupported compression method ${method} for ${name}`)
   }
@@ -216,6 +214,9 @@ export async function extractZip(buffer, extractRoot) {
       length: entry.compressedSize,
       label: `data of ${entry.name}`,
     })
+    if (dataStart + entry.compressedSize > eocd.centralDirectoryOffset) {
+      throw new ZipReadError(`data of ${entry.name} overlaps the central directory`)
+    }
     const compressed = buffer.subarray(dataStart, dataStart + entry.compressedSize)
     let bytes
     if (entry.method === METHOD_STORE) {
@@ -266,6 +267,11 @@ function resolveLocalDataStart(buffer, entry) {
   })
   if (buffer.readUInt32LE(entry.localHeaderOffset) !== LOCAL_HEADER_SIGNATURE) {
     throw new ZipReadError(`invalid local header for ${entry.name}`)
+  }
+  const localFlags = buffer.readUInt16LE(entry.localHeaderOffset + 6)
+  const localMethod = buffer.readUInt16LE(entry.localHeaderOffset + 8)
+  if (localFlags !== entry.flags || localMethod !== entry.method) {
+    throw new ZipReadError(`local/central metadata mismatch for ${entry.name}`)
   }
   const localNameLength = buffer.readUInt16LE(entry.localHeaderOffset + 26)
   const localExtraLength = buffer.readUInt16LE(entry.localHeaderOffset + 28)

@@ -135,13 +135,13 @@ describe('zip reader path-safety rejects', () => {
     }
   })
 
-  it('rejects encrypted and data-descriptor entries', async () => {
+  it('rejects encrypted entries and accepts central-directory data descriptors', async () => {
     const root = await mkdtemp(join(tmpdir(), 'lo-zip-flags-'))
     try {
       const encrypted = buildRawZip([{ name: 'a.txt', bytes: Buffer.from('x'), flags: 0x0801 }])
       await expect(extractZip(encrypted, root)).rejects.toThrow(/encrypted/)
       const descriptor = buildRawZip([{ name: 'a.txt', bytes: Buffer.from('x'), flags: 0x0808 }])
-      await expect(extractZip(descriptor, root)).rejects.toThrow(/data-descriptor/)
+      await expect(extractZip(descriptor, root)).resolves.toHaveLength(1)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
