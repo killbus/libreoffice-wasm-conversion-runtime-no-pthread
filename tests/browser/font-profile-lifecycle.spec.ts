@@ -379,7 +379,7 @@ test.describe("dynamic font profile qualification", () => {
     const identities = allTransitions.map((entry) =>
       JSON.stringify(entry.identity),
     );
-    expect(new Set(identities)).toHaveSize(1);
+    expect(new Set(identities).size).toBe(1);
     for (const [index, transition] of result.transitions.entries()) {
       expect(transition.runtimeReusable).toBe(true);
       expect(transition.quarantine).toBe(false);
